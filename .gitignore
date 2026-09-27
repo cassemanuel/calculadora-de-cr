@@ -1,0 +1,24 @@
+# Documentos pessoais e arquivos de calibração local
+docs-pessoais/
+*.pdf
+*.xlsx
+*.xls
+
+# Dados e históricos gerados
+data/
+*.json
+!package.json
+!package-lock.json
+
+# Logs e arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+*.log
+
+# Dependências e caches (caso sejam adicionadas no futuro)
+node_modules/
+.cache/
+
+# Ambientes virtuais e arquivos de ambiente
+.env
+.env.local

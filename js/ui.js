@@ -1,0 +1,73 @@
+/**
+ * Helpers e renderização de componentes da interface.
+ */
+
+/**
+ * Cria um elemento DOM a partir de uma tag e atributos.
+ * @param {string} tag
+ * @param {object} [attrs]
+ * @param {string | Node | Array<string | Node>} [children]
+ * @returns {HTMLElement}
+ */
+export function el(tag, attrs = {}, children) {
+  const element = document.createElement(tag);
+
+  Object.entries(attrs).forEach(([key, value]) => {
+    if (key === 'className') {
+      element.className = value;
+    } else if (key === 'dataset') {
+      Object.assign(element.dataset, value);
+    } else if (key.startsWith('on') && typeof value === 'function') {
+      element.addEventListener(key.slice(2).toLowerCase(), value);
+    } else {
+      element.setAttribute(key, value);
+    }
+  });
+
+  if (children !== undefined) {
+    const nodes = Array.isArray(children) ? children : [children];
+    nodes.forEach((child) => {
+      if (child instanceof Node) {
+        element.appendChild(child);
+      } else if (child !== null && child !== undefined) {
+        element.appendChild(document.createTextNode(String(child)));
+      }
+    });
+  }
+
+  return element;
+}
+
+/**
+ * Retorna a classe CSS do badge de acordo com a situação final (SF).
+ * @param {string} situacao
+ * @returns {string}
+ */
+export function badgeClassForSituacao(situacao) {
+  switch (situacao?.toUpperCase()) {
+    case 'AP':
+      return 'badge-ap';
+    case 'RM':
+    case 'RF':
+    case 'RFM':
+      return 'badge-reprovado';
+    case 'NCG':
+    case 'NCC':
+    case 'T':
+      return 'badge-neutro';
+    case 'CURSANDO':
+      return 'badge-cursando';
+    default:
+      return 'badge-ciano';
+  }
+}
+
+/**
+ * Limpa o conteúdo de um elemento.
+ * @param {HTMLElement} element
+ */
+export function clearElement(element) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+}
