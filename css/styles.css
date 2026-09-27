@@ -822,26 +822,40 @@ tbody tr:hover {
 
 .eixo-body table {
   width: 100%;
-}
-
-.eixo-body th {
-  white-space: nowrap;
+  table-layout: fixed;
+  border-collapse: collapse;
 }
 
 .eixo-body th:nth-child(1),
 .eixo-body td:nth-child(1) {
-  width: 80px;
+  width: 75px;
+  text-align: left;
 }
 
+.eixo-body th:nth-child(2),
 .eixo-body td:nth-child(2) {
-  min-width: 140px;
-  word-break: break-word;
+  width: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.eixo-body th:nth-child(n + 3),
-.eixo-body td:nth-child(n + 3) {
+.eixo-body th:nth-child(3),
+.eixo-body td:nth-child(3) {
+  width: 45px;
   text-align: center;
-  white-space: nowrap;
+}
+
+.eixo-body th:nth-child(4),
+.eixo-body td:nth-child(4) {
+  width: 50px;
+  text-align: right;
+}
+
+.eixo-body th:nth-child(5),
+.eixo-body td:nth-child(5) {
+  width: 50px;
+  text-align: center;
 }
 
 /* ----- Inputs ----- */

@@ -973,13 +973,17 @@ function renderAnalytics() {
   }
 
   const periodos = [...data.periodos].sort((a, b) => periodoKey(a.periodo) - periodoKey(b.periodo));
-  const pontos = periodos.map((periodo, index) => ({
-    periodo: periodo.periodo || `${index + 1}`,
-    crPeriodo: calcularCRAcumulado({ periodos: [periodo] }).crCalculado,
-    crAcumulado: calcularCRAcumulado({ periodos: periodos.slice(0, index + 1) }).crCalculado,
-    crRComGrau: calcularCRAcumulado({ periodos: [periodo] }).crRComGrau,
-    disciplinas: periodo.disciplinas || [],
-  }));
+  const pontos = periodos
+    .map((periodo, index) => ({
+      periodo: periodo.periodo || `${index + 1}`,
+      crPeriodo: calcularCRAcumulado({ periodos: [periodo] }).crCalculado,
+      crAcumulado: calcularCRAcumulado({ periodos: periodos.slice(0, index + 1) }).crCalculado,
+      crRComGrau: calcularCRAcumulado({ periodos: [periodo] }).crRComGrau,
+      disciplinas: periodo.disciplinas || [],
+    }))
+    // Ignora registros sem disciplinas que conferem grau (ex.: bloco de
+    // créditos transferidos "2023"), que derrubariam a linha do gráfico.
+    .filter((p) => p.crRComGrau > 0);
 
   container.appendChild(renderChartCard(pontos));
   container.appendChild(renderMetricasHistoricas(periodos, data.resumo, pontos));
@@ -1231,7 +1235,7 @@ function renderEixoCard(eixo) {
           el('tr', {}, [
             el('th', {}, 'Código'),
             el('th', {}, 'Nome'),
-            el('th', {}, 'Créditos'),
+            el('th', {}, 'CrR'),
             el('th', {}, 'Grau'),
             el('th', {}, 'SF'),
           ]),

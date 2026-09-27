@@ -62,6 +62,7 @@ const MAPA_EIXOS = {
   ICP027: EIXOS.SISTEMAS, // Criptografia
   ICP028: EIXOS.SISTEMAS, // Tóp Esp em Arquitetura
   ICP367: EIXOS.SISTEMAS, // Sistemas Distribuídos
+  ICP622: EIXOS.SISTEMAS, // Programação Paralela e Distribuída
 
   // 3. Engenharia de Software e Aplicações
   ICP131: EIXOS.ENGENHARIA, // Programação de Computadores I
@@ -155,6 +156,9 @@ const MAPA_EIXOS = {
   ICPX04: EIXOS.GERAL,
   ICPX06: EIXOS.GERAL, // Atividades Complementares
   ICPZ55: EIXOS.GERAL, // Extensão
+  LEB599: EIXOS.GERAL, // Libras (optativa condicionada do PPC)
+  NCG011: EIXOS.GERAL, // Acessando a Mente e o Espaço
+  CMT001: EIXOS.GERAL, // Estudo Dirigido (CCMN)
 
   // 6. Equivalências históricas — códigos da grade antiga (MAB/legados)
   // atribuídos ao eixo da disciplina equivalente no PPC 2022.
@@ -177,10 +181,12 @@ const MAPA_EIXOS = {
   ICP004: EIXOS.DADOS, // Aprendizado de Máquina -> ICP363
 };
 
-// Prefixos de unidades fora do rol do BCC (Física, Letras, outros centros)
-// caem no fallback e são classificados como Livre Escolha.
+// Prefixos NEP/FCF são as disciplinas de Escolha Restrita do Grupo Humanas
+// do PPC. Demais unidades fora do rol do BCC (Física, Letras, outros
+// centros) caem no fallback e são classificadas como Livre Escolha.
 const PREFIXOS_EIXOS = [
   [/^MA[ED]/, EIXOS.TEORIA],
+  [/^(NEP|FCF)/, EIXOS.GERAL],
   [/^(ICP|MAB)/, EIXOS.ENGENHARIA],
 ];
 
