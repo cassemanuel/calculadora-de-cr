@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>Seed</title></head>
+<body>
+<script>
+const d = (codigo, nome, ch, crR, grau, situacao = 'AP') => ({
+  codigo, nome, ch, crR, grau,
+  pontos: grau * crR,
+  situacao,
+  conferGrau: true,
+});
+const data = {
+  metadata: {
+    nome: 'Aluno Exemplo', dre: '123456789', curso: 'Ciência da Computação',
+    ingresso: '2023/1', emissao: '27/09/2026', tipoDocumento: 'boletim',
+  },
+  periodos: [
+    { periodo: '2023/1', disciplinas: [
+      d('ICP131', 'Programação de Computadores I', 60, 4, 8.0),
+      d('ICP144', 'Matemática Discreta', 60, 4, 7.5),
+      d('MAE111', 'Cálculo Infinitesimal I', 60, 4, 6.5),
+      d('ICP135', 'Projeto de Carreira', 30, 2, 9.0),
+    ]},
+    { periodo: '2023/2', disciplinas: [
+      d('ICP141', 'Programação de Computadores II', 60, 4, 7.0),
+      d('ICP116', 'Estruturas de Dados', 60, 4, 6.0),
+      d('MAE992', 'Cálculo Integ e Diferencial II', 60, 4, 5.5),
+      d('FIS111', 'Física I', 60, 4, 7.0),
+    ]},
+    { periodo: '2024/1', disciplinas: [
+      d('ICP246', 'Arquitetura de Computadores e SO', 60, 4, 8.5),
+      d('ICP368', 'Algoritmos e Grafos', 60, 4, 9.0),
+      d('FIS112', 'Física II', 60, 4, 6.5),
+      d('ICP361', 'Programação Concorrente', 60, 4, 7.5),
+    ]},
+    { periodo: '2024/2', disciplinas: [
+      d('ICP489', 'Banco de Dados I', 60, 4, 8.0),
+      d('ICP363', 'Introd Aprendizado de Máquina', 60, 4, 9.5),
+      d('MAD243', 'Estatística e Probabilidade', 60, 4, 7.0),
+      d('ICP473', 'Segurança da Informação', 60, 4, 4.0, 'RM'),
+    ]},
+    { periodo: '2025/1', disciplinas: [
+      d('ICP471', 'Compiladores', 60, 4, 8.8),
+      d('ICP616', 'Interação Humano-Computador', 60, 4, 9.2),
+      d('NEP142', 'Tóp Esp Políticas Públicas e Dir Humanos', 30, 2, 8.4),
+    ]},
+  ],
+};
+let crR = 0, pts = 0;
+data.periodos.forEach(p => p.disciplinas.forEach(x => { crR += x.crR; pts += x.pontos; }));
+data.resumo = { crRComGrau: crR, pontosTotais: pts, crCalculado: pts / crR };
+localStorage.setItem('cr-calculator-history', JSON.stringify(data));
+location.replace('index.html');
+</script>
+</body>
+</html>
