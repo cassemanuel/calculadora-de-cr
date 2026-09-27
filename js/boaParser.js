@@ -1,67 +1,157 @@
 /**
  * Parser opcional do Boletim de Orientação Acadêmica (BOA).
  *
- * Extrai o currículo recomendado e as disciplinas já aprovadas/equivalentes,
- * permitindo sugerir disciplinas pendentes para o simulador.
+ * Extrai disciplinas pendentes do currículo recomendado para sugerir no simulador.
  */
 
-const CODIGO_REGEX = /([A-Z]{2,}[A-Z\d]*\d)/;
-
-const IGNORE_BOA_KEYWORDS = [
-  'PR1',
-  'BOLETIM',
-  'ORIENTAÇÃO',
-  'UFRJ',
-  'DRE',
-  'CASSIO',
-  'Aluno',
-  'Página',
-  'Emissão',
-  'Centro de Ciencias',
-  'Instituto de',
-  'Bacharelado',
-  'Integral',
-  'Unidade',
-  'Matrícula',
-  'Ativa',
-  'Sit. Matrícula',
-  'Turno',
-  'Formação',
-  'Atividades Acadêmicas Obrigatórias',
-  'Atividades Acadêmicas Optativas',
-  'Elenco Recomendado',
-  'Dados Atuais',
-  'já aprovadas',
-  'Ativ. Acad.',
-  'Falta Cumprir',
-  'Já Cumpridos',
-  'Totais a serem cumpridos',
-  'Extensão',
+const CODIGO_UFRJ_REGEX = /([A-Z]{3}\d{3}|[A-Z]{3}[A-Z0-9]\d{2}|[A-Z]{2,}\d+[A-Z]?\d*)/g;
+const CREDITOS_REGEX = /(\d+\.\d)/g;
+const PENDENTE_TERMS = ['cursando', 'facultada', 'vedada', 'a cursar'];
+const IGNORE_TERMS = [
+  'pr1', 'boletim', 'orientacao', 'ufrj', 'dre', 'cassio', 'aluno', 'pagina',
+  'emissao', 'centro de ciencias', 'instituto de', 'bacharelado', 'integral',
+  'unidade', 'matricula', 'ativa', 'sit. matricula', 'turno', 'formacao',
+  'atividades academicas obrigatorias', 'atividades academicas optativas',
+  'elenco recomendado', 'dados atuais', 'ja aprovadas', 'ativ. acad.',
+  'falta cumprir', 'ja cumpridos', 'totais a serem cumpridos', 'extensao',
 ];
 
-const PENDENTE_STATUS = ['cursando', 'inscrição vedada', 'inscrição facultada'];
+function normalize(str) {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isLinhaIgnorada(line) {
+  const normalized = normalize(line);
+  return IGNORE_TERMS.some((term) => normalized.includes(term));
+}
+
+function hasPendenteStatus(line) {
+  const normalized = normalize(line);
+  return PENDENTE_TERMS.some((term) => normalized.includes(term));
+}
+
+function hasNotaAprovacao(line) {
+  const notas = line.match(/\b(\d+(?:\.\d)?)\b/g)?.map(Number) ?? [];
+  return notas.some((n) => n >= 5 && n <= 10);
+}
+
+function extrairNome(line, codigo, idxCodigo) {
+  // Toma tudo antes do código, remove prefixos numéricos e créditos.
+  let prefixo = line.slice(0, idxCodigo).trim();
+
+  // Remove crédito no final (ex: "4.0", "2.0").
+  prefixo = prefixo.replace(/\d+\.\d\s*$/, '').trim();
+
+  // Remove padrões "CH Per" no início (ex: "60 1", "90 8").
+  prefixo = prefixo.replace(/^\d+\s+\d+\s*/, '').trim();
+
+  return prefixo || codigo;
+}
+
+function extrairCreditos(line, idxCodigo) {
+  const prefixo = line.slice(0, idxCodigo);
+  const matches = prefixo.match(CREDITOS_REGEX);
+  if (matches) {
+    const last = matches[matches.length - 1];
+    const value = parseFloat(last);
+    if (value > 0 && value <= 10) return value;
+  }
+  return 4.0;
+}
+
+function extrairPeriodoRecomendado(line) {
+  // Ex: "60 4Comput..." ou "90 8Trab..." (CH colada com período).
+  const match = line.match(/^(\d{2,3})\s*(\d)(?=[A-Za-zÁ-Úá-ú\s])/);
+  return match ? parseInt(match[2], 10) : null;
+}
 
 /**
- * Extrai texto de um arquivo PDF usando pdfjs-dist.
- * @param {ArrayBuffer | Uint8Array} pdfData
- * @returns {Promise<string[]>}
+ * Tenta extrair disciplinas pendentes de uma linha, considerando também
+ * contexto de até 2 linhas adjacentes.
+ * @param {string} line
+ * @param {number} index
+ * @param {string[]} allLines
+ * @returns {Array<object>}
  */
-export async function extractBOAText(pdfData) {
-  if (!window.pdfjsLib) {
-    throw new Error('pdf.js não está disponível.');
+export function parseBOALineRobust(line, index, allLines) {
+  if (!line || line.length < 8 || isLinhaIgnorada(line)) return [];
+
+  const resultados = [];
+  const codigoMatches = [...line.matchAll(CODIGO_UFRJ_REGEX)];
+
+  for (const match of codigoMatches) {
+    const codigo = match[1];
+    const idxCodigo = match.index;
+
+    // Contexto pequeno: linha atual + vizinhas imediatas (status pode estar próximo).
+    const contexto = [allLines[index - 1] || '', line, allLines[index + 1] || ''].join(' ');
+
+    // Só considera pendente se houver termo de status na linha/contexto.
+    if (!hasPendenteStatus(contexto)) continue;
+
+    // Rejeita se a PRÓPRIA linha contiver nota de aprovação lançada (>= 5).
+    if (hasNotaAprovacao(line)) continue;
+
+    const nome = extrairNome(line, codigo, idxCodigo);
+    const crR = extrairCreditos(line, idxCodigo);
+    const periodoRecomendado = extrairPeriodoRecomendado(line);
+
+    let status = 'pendente';
+    const normalizedContext = normalize(contexto);
+    if (normalizedContext.includes('inscricao vedada')) status = 'inscricao_vedada';
+    else if (normalizedContext.includes('inscricao facultada')) status = 'inscricao_facultada';
+    else if (normalizedContext.includes('cursando')) status = 'cursando';
+
+    resultados.push({
+      codigo,
+      nome,
+      crR,
+      periodoRecomendado,
+      status,
+    });
   }
 
-  const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
-  const lines = [];
+  return resultados;
+}
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const linhasPagina = agruparItensPorLinha(textContent.items);
-    lines.push(...linhasPagina.map((l) => l.trim()).filter(Boolean));
-  }
+/**
+ * Parser principal do BOA.
+ * @param {string[]} lines
+ * @returns {{obrigatorias: Array<object>, optativas: Array<object>}}
+ */
+export function parseBOA(lines) {
+  const obrigatorias = [];
+  const optativas = [];
+  let emOptativas = false;
 
-  return lines;
+  lines.forEach((line, index) => {
+    const lower = line.toLowerCase();
+
+    if (lower.includes('atividades acadêmicas optativas')) {
+      emOptativas = true;
+      return;
+    }
+
+    if (lower.includes('falta cumprir') || lower.includes('já cumpridos')) {
+      emOptativas = false;
+      return;
+    }
+
+    const disciplinas = parseBOALineRobust(line, index, lines);
+    disciplinas.forEach((d) => {
+      console.log('[BOA] Disciplina pendente encontrada:', d);
+      if (emOptativas || d.periodoRecomendado == null) {
+        optativas.push(d);
+      } else {
+        obrigatorias.push(d);
+      }
+    });
+  });
+
+  return { obrigatorias, optativas };
 }
 
 function agruparItensPorLinha(items) {
@@ -92,104 +182,31 @@ function agruparItensPorLinha(items) {
     );
 }
 
-function isLinhaIgnorada(line) {
-  const upper = line.toUpperCase();
-  return IGNORE_BOA_KEYWORDS.some((kw) => upper.includes(kw.toUpperCase()));
-}
-
-function detectarStatusPendente(line) {
-  const lower = line.toLowerCase();
-  if (lower.includes('inscrição vedada')) return 'inscricao_vedada';
-  if (lower.includes('inscrição facultada')) return 'inscricao_facultada';
-  if (lower.includes('cursando')) return 'cursando';
-  return null;
-}
-
 /**
- * Tenta extrair uma disciplina PENDENTE de uma linha do BOA.
- * Retorna null se a linha representar uma disciplina já aprovada ou for cabeçalho/lixo.
- * @param {string} line
- * @returns {object|null}
+ * Extrai texto de um arquivo PDF usando pdfjs-dist.
+ * @param {ArrayBuffer | Uint8Array} pdfData
+ * @returns {Promise<string[]>}
  */
-export function parseBOALine(line) {
-  if (!line || line.length < 8) return null;
-  if (isLinhaIgnorada(line)) return null;
-
-  const status = detectarStatusPendente(line);
-  if (!status) return null;
-
-  // Uma linha pendente não deve ter nota de aprovação (>= 5) ao lado de um código.
-  // Se tiver, provavelmente é uma disciplina já concluída em outra coluna.
-  const notas = line.match(/\b(\d+(?:\.\d)?)\b/g)?.map(Number) ?? [];
-  if (notas.some((n) => n >= 5 && n <= 10)) return null;
-
-  const codigoMatch = line.match(CODIGO_REGEX);
-  if (!codigoMatch) return null;
-
-  const codigo = codigoMatch[1];
-  const idxCodigo = line.indexOf(codigo);
-
-  // Créditos: número decimal (ex: 4.0) colado logo antes do primeiro código.
-  const creditosMatch = line.slice(0, idxCodigo).match(/(\d+\.\d)\s*$/);
-  if (!creditosMatch) return null;
-  const crR = parseFloat(creditosMatch[1]);
-
-  // Nome: texto entre início e os créditos, removendo CH e período.
-  const prefixo = line.slice(0, idxCodigo).replace(/\s*\d+\.\d\s*$/, '').trim();
-  const nome = prefixo.replace(/^\d+\s+\d+\s*/, '').trim();
-
-  // Período recomendado: segundo número isolado no início da linha (ex: "60 1").
-  const periodoMatch = prefixo.match(/^(\d+)\s+(\d+)/);
-  const periodoRecomendado = periodoMatch ? parseInt(periodoMatch[2], 10) : null;
-
-  return {
-    codigo,
-    nome: nome || codigo,
-    crR,
-    periodoRecomendado,
-    status,
-  };
-}
-
-/**
- * Parser principal do BOA.
- * @param {string[]} lines
- * @returns {{obrigatorias: Array<object>, optativas: Array<object>}}
- */
-export function parseBOA(lines) {
-  const obrigatorias = [];
-  const optativas = [];
-
-  let emOptativas = false;
-
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-
-    if (lower.includes('atividades acadêmicas optativas')) {
-      emOptativas = true;
-      continue;
-    }
-
-    if (lower.includes('falta cumprir') || lower.includes('já cumpridos')) {
-      emOptativas = false;
-      continue;
-    }
-
-    const disciplina = parseBOALine(line);
-    if (disciplina) {
-      if (emOptativas) {
-        optativas.push(disciplina);
-      } else {
-        obrigatorias.push(disciplina);
-      }
-    }
+export async function extractBOAText(pdfData) {
+  if (!window.pdfjsLib) {
+    throw new Error('pdf.js não está disponível.');
   }
 
-  return { obrigatorias, optativas };
+  const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
+  const lines = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const linhasPagina = agruparItensPorLinha(textContent.items);
+    lines.push(...linhasPagina.map((l) => l.trim()).filter(Boolean));
+  }
+
+  return lines;
 }
 
 /**
- * Processa um arquivo BOA e retorna o currículo estruturado.
+ * Processa um arquivo BOA e retorna as disciplinas pendentes.
  * @param {ArrayBuffer | Uint8Array} pdfData
  * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>}>}
  */

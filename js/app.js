@@ -3,6 +3,7 @@ import {
   saveThemePreference,
   loadHistory,
   saveHistory,
+  clearHistory,
   exportJSON,
   importJSON,
 } from './storage.js';
@@ -143,6 +144,10 @@ async function handlePDFUpload(file, { progress, progressBar, report }) {
   progress?.classList.remove('hidden');
   if (progressBar) progressBar.style.width = '0%';
 
+  // Evita que um cache antigo ou corrompido influencie o novo processamento.
+  clearHistory();
+  state.historyData = null;
+
   try {
     const arrayBuffer = await file.arrayBuffer();
     const data = await processarPDF(arrayBuffer, (pct) => {
@@ -204,6 +209,19 @@ function initDataActions() {
       importInput.value = '';
     }
   });
+
+  const clearBtn = document.getElementById('clear-data');
+  clearBtn?.addEventListener('click', () => {
+    if (confirm('Deseja apagar todos os dados salvos deste navegador?')) {
+      clearHistory();
+      state.historyData = null;
+      state.simulatorDisciplinas = [];
+      clearElement(report);
+      report?.classList.add('hidden');
+      initSimulator();
+      alert('Dados salvos apagados.');
+    }
+  });
 }
 
 /* ============================================================
@@ -228,8 +246,10 @@ function renderReport(container, data) {
       el('h3', {}, 'Disciplinas por Período'),
     ]);
 
-    periodos.forEach((periodo) => {
-      periodosSection.appendChild(renderPeriodo(periodo));
+    periodos.forEach((periodo, index) => {
+      const periodosAteAqui = periodos.slice(0, index + 1);
+      const crAcumulado = calcularCRAcumulado({ periodos: periodosAteAqui });
+      periodosSection.appendChild(renderPeriodo(periodo, crAcumulado));
     });
 
     container.appendChild(periodosSection);
@@ -286,14 +306,17 @@ function renderResumoCard(resumo) {
   ]);
 }
 
-function renderPeriodo(periodo) {
+function renderPeriodo(periodo, crAcumuladoAteAqui) {
   const crPeriodo = calcularCRAcumulado({ periodos: [periodo] });
   const header = el('button', { className: 'periodo-header' }, [
     el('span', {}, periodo.periodo || 'Período não identificado'),
     el(
       'span',
       {},
-      `CR: ${formatNumberBR(crPeriodo.crCalculado, 3)} — ${periodo.disciplinas.length} disciplinas`
+      `CR período: ${formatNumberBR(crPeriodo.crCalculado, 3)} | CR acumulado: ${formatNumberBR(
+        crAcumuladoAteAqui.crCalculado,
+        3
+      )} — ${periodo.disciplinas.length} disciplinas`
     ),
   ]);
 

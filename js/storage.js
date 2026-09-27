@@ -42,6 +42,17 @@ export function saveHistory(historyData) {
 }
 
 /**
+ * Remove o histórico salvo do localStorage.
+ */
+export function clearHistory() {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.history);
+  } catch (e) {
+    console.error('Erro ao limpar histórico:', e);
+  }
+}
+
+/**
  * Carrega o histórico salvo, se existir e for válido.
  * @returns {object | null}
  */
