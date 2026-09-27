@@ -7,7 +7,7 @@
  * - NCG, NCC, T e Cursando não conferem grau.
  */
 
-import { situacaoConferGrau } from './calculator.js';
+import { disciplinaConferGrau } from './calculator.js';
 
 const HEADER_REGEX = /CH\s+SFGrau\s+CrO\s+PontosPer[íi]odo\s+C[óo]digo\s+Nome\s+da\s+Disciplina\/RCC\s+CrR/i;
 const PERIODO_REGEX = /^\d{4}(?:\/\d)?$/;
@@ -228,7 +228,7 @@ export function parseDisciplinaLine(line) {
     nome,
     codigo,
     situacao,
-    conferGrau: situacaoConferGrau(situacao),
+    conferGrau: disciplinaConferGrau({ situacao, grau: parseCampoDisciplina(grauRaw) }),
   };
 }
 

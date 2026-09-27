@@ -3,13 +3,16 @@
  *
  * Regras de negócio implementadas:
  * - CR = Σ(Grau × CrR) / Σ(CrR), considerando apenas disciplinas que conferem grau.
- * - Conferem grau: AP, RM, RF, RFM.
- * - Não conferem grau: NCG, NCC, T (transferência), Cursando.
+ * - Conferem grau: AP, RM, RF, RFM cujo grau seja um número válido.
+ * - Não conferem grau: situações NCG, NCC, T, Cursando, ou quando o
+ *   campo grau for textual (T, NCG, NCC, *****), indicando transferência
+ *   ou disciplinas que não computam nota para o CR.
  * - Períodos com trancamentos são ignorados.
  */
 
 const SITUACOES_COM_GRAU = ['AP', 'RM', 'RF', 'RFM'];
 const SITUACOES_SEM_GRAU = ['NCG', 'NCC', 'T', 'CURSANDO'];
+const GRAUS_TEXTUAIS_SEM_GRAU = ['T', 'NCG', 'NCC', '*****'];
 
 /**
  * Determina se uma situação final (SF) confere grau.
@@ -21,6 +24,35 @@ export function situacaoConferGrau(situacao) {
   return SITUACOES_COM_GRAU.includes(String(situacao).toUpperCase());
 }
 
+function isGrauNumericoValido(grau) {
+  return typeof grau === 'number' && !isNaN(grau);
+}
+
+function isGrauTextualSemGrau(grau) {
+  if (grau === null || grau === undefined) return true;
+  return GRAUS_TEXTUAIS_SEM_GRAU.includes(String(grau).toUpperCase());
+}
+
+/**
+ * Determina se uma disciplina confere grau para o cálculo do CR.
+ * Considera tanto a situação final quanto o tipo do grau.
+ * @param {object} disciplina
+ * @returns {boolean}
+ */
+export function disciplinaConferGrau(disciplina) {
+  if (!disciplina) return false;
+  const situacao = String(disciplina.situacao || '').toUpperCase();
+
+  // Situações explícitas sem grau
+  if (SITUACOES_SEM_GRAU.includes(situacao)) return false;
+
+  // Grau textual indica transferência ou disciplina sem nota
+  if (isGrauTextualSemGrau(disciplina.grau)) return false;
+
+  // Apenas situações com grau e grau numérico válido entram
+  return SITUACOES_COM_GRAU.includes(situacao) && isGrauNumericoValido(disciplina.grau);
+}
+
 /**
  * Retorna o peso de créditos de uma disciplina.
  * Apenas disciplinas que conferem grau entram no numerador/denominador.
@@ -28,7 +60,7 @@ export function situacaoConferGrau(situacao) {
  * @returns {{crR: number, pontos: number}}
  */
 export function extrairPesoDisciplina(disciplina) {
-  const confere = situacaoConferGrau(disciplina.situacao);
+  const confere = disciplinaConferGrau(disciplina);
   if (!confere) return { crR: 0, pontos: 0 };
   return {
     crR: Number(disciplina.crR) || 0,
@@ -191,6 +223,25 @@ export function runCalculatorTests() {
   assertTrue(!situacaoConferGrau('T'), 'T não deve conferir grau');
   assertTrue(!situacaoConferGrau('Cursando'), 'Cursando não deve conferir grau');
   results.push('Situações de grau: OK');
+
+  // 1b. Disciplina com grau textual T/NCG/NCC não entra no CR
+  assertTrue(
+    !disciplinaConferGrau({ situacao: 'AP', grau: 'T', crR: 4 }),
+    'Transferência (grau T) não confere grau'
+  );
+  assertTrue(
+    !disciplinaConferGrau({ situacao: 'AP', grau: 'NCG', crR: 2 }),
+    'NCG textual não confere grau'
+  );
+  assertTrue(
+    disciplinaConferGrau({ situacao: 'AP', grau: 10.0, crR: 4 }),
+    'AP com grau numérico confere grau'
+  );
+  assertTrue(
+    disciplinaConferGrau({ situacao: 'RM', grau: 0, crR: 4 }),
+    'RM com grau numérico confere grau'
+  );
+  results.push('Grau textual T/NCG/NCC excluído: OK');
 
   // 2. CR simples
   assertEqual(calcularCR(42, 6), 7, 'CR simples 42/6');
