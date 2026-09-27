@@ -97,6 +97,21 @@
         <p class="text-muted">Adicione as disciplinas em curso para prever o impacto no CR acumulado.</p>
         <div id="pdf-simulator-content"></div>
       </section>
+
+      <section class="data-actions" id="data-actions" aria-labelledby="data-actions-title">
+        <h3 id="data-actions-title">Dados</h3>
+        <div class="actions-row">
+          <button id="export-json" class="btn btn-secondary" type="button">
+            <i class="bi bi-download" aria-hidden="true"></i>
+            Exportar JSON
+          </button>
+          <label class="btn btn-secondary">
+            <i class="bi bi-upload" aria-hidden="true"></i>
+            Importar JSON
+            <input type="file" id="import-json" accept=".json,application/json" hidden />
+          </label>
+        </div>
+      </section>
     </section>
 
     <section id="tab-quick" class="tab-panel" aria-labelledby="tab-quick-btn" hidden>

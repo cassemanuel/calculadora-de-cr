@@ -616,6 +616,60 @@ select:focus {
   font-style: italic;
 }
 
+/* ----- Ações e formulários ----- */
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin: var(--spacing-lg) 0;
+}
+
+.data-actions {
+  margin-top: var(--spacing-xl);
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.form-row label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.form-row input[type="radio"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--cor-ic1);
+}
+
+.simulator .card,
+.data-actions .card {
+  margin-top: var(--spacing-md);
+}
+
+/* Inputs dentro de tabelas */
+table input[type="text"],
+table input[type="number"] {
+  width: 100%;
+  min-width: 80px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: 0.9rem;
+}
+
+table .btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: 0.85rem;
+}
+
 /* ----- Footer ----- */
 .app-footer {
   margin-top: auto;

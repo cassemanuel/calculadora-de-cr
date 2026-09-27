@@ -1,21 +1,44 @@
-import { loadThemePreference, saveThemePreference, saveHistory } from './storage.js';
+import {
+  loadThemePreference,
+  saveThemePreference,
+  loadHistory,
+  saveHistory,
+  exportJSON,
+  importJSON,
+} from './storage.js';
 import { processarPDF } from './pdfParser.js';
-import { calcularCRAcumulado } from './calculator.js';
+import { processarBOA } from './boaParser.js';
+import {
+  calcularCRAcumulado,
+  calcularCRDisciplinas,
+  calcularMetaReversa,
+  calcularImpactoCR,
+} from './calculator.js';
 import { el, badgeClassForSituacao, clearElement } from './ui.js';
 
-/**
- * Inicializa a aplicação.
- */
+// Estado global da aplicação.
+const state = {
+  historyData: null,
+  simulatorDisciplinas: [],
+};
+
 function init() {
   configurePdfWorker();
   initTheme();
   initTabs();
   initDropzone();
+  initDataActions();
+  initSimulator();
+  initQuickCalculator();
+
+  // Carrega histórico salvo, se existir.
+  const saved = loadHistory();
+  if (saved) {
+    state.historyData = saved;
+    renderReport(document.getElementById('pdf-report'), saved);
+  }
 }
 
-/**
- * Configura o worker do pdfjs-dist a partir do CDN.
- */
 function configurePdfWorker() {
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -25,9 +48,6 @@ function configurePdfWorker() {
   }
 }
 
-/**
- * Inicializa o tema (light/dark) e o botão de toggle.
- */
 function initTheme() {
   const preferredTheme = loadThemePreference();
   applyTheme(preferredTheme);
@@ -43,9 +63,6 @@ function initTheme() {
   });
 }
 
-/**
- * Aplica o tema ao elemento <html> e atualiza o ícone do botão.
- */
 function applyTheme(theme) {
   const html = document.documentElement;
   const toggleBtn = document.getElementById('theme-toggle');
@@ -68,9 +85,6 @@ function applyTheme(theme) {
   }
 }
 
-/**
- * Inicializa o comportamento das abas.
- */
 function initTabs() {
   const tabButtons = document.querySelectorAll('.tab-btn[data-tab]');
   const tabPanels = document.querySelectorAll('.tab-panel');
@@ -95,9 +109,6 @@ function initTabs() {
   });
 }
 
-/**
- * Configura o dropzone de upload de PDF.
- */
 function initDropzone() {
   const dropzone = document.getElementById('pdf-dropzone');
   const input = document.getElementById('pdf-input');
@@ -128,12 +139,9 @@ function initDropzone() {
   });
 }
 
-/**
- * Processa o arquivo PDF selecionado.
- */
 async function handlePDFUpload(file, { progress, progressBar, report }) {
   progress?.classList.remove('hidden');
-  progressBar && (progressBar.style.width = '0%');
+  if (progressBar) progressBar.style.width = '0%';
 
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -141,33 +149,67 @@ async function handlePDFUpload(file, { progress, progressBar, report }) {
       if (progressBar) progressBar.style.width = `${Math.round(pct * 100)}%`;
     });
 
-    const cr = calcularCRAcumulado(data);
-    data.resumo = cr;
+    data.resumo = calcularCRAcumulado(data);
 
+    state.historyData = data;
     saveHistory(data);
     renderReport(report, data);
 
     console.log('Histórico parseado:', data);
   } catch (err) {
     console.error(err);
-    if (report) {
-      clearElement(report);
-      report.classList.remove('hidden');
-      report.appendChild(
-        el('div', { className: 'card' }, [
-          el('h3', {}, 'Erro ao processar PDF'),
-          el('p', { className: 'text-muted' }, err.message),
-        ])
-      );
-    }
+    showError(report, err.message);
   } finally {
     progress?.classList.add('hidden');
   }
 }
 
-/**
- * Renderiza o relatório de metadados, resumo e períodos.
- */
+function showError(container, message) {
+  if (!container) return;
+  clearElement(container);
+  container.classList.remove('hidden');
+  container.appendChild(
+    el('div', { className: 'card' }, [
+      el('h3', {}, 'Erro ao processar PDF'),
+      el('p', { className: 'text-muted' }, message),
+    ])
+  );
+}
+
+function initDataActions() {
+  const exportBtn = document.getElementById('export-json');
+  const importInput = document.getElementById('import-json');
+  const report = document.getElementById('pdf-report');
+
+  exportBtn?.addEventListener('click', () => {
+    if (!state.historyData) {
+      alert('Nenhum histórico para exportar. Importe um PDF primeiro.');
+      return;
+    }
+    exportJSON(state.historyData);
+  });
+
+  importInput?.addEventListener('change', async () => {
+    const file = importInput.files?.[0];
+    if (!file) return;
+    try {
+      const data = await importJSON(file);
+      data.resumo = calcularCRAcumulado(data);
+      state.historyData = data;
+      saveHistory(data);
+      renderReport(report, data);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      importInput.value = '';
+    }
+  });
+}
+
+/* ============================================================
+   Relatório de histórico
+   ============================================================ */
+
 function renderReport(container, data) {
   if (!container) return;
   clearElement(container);
@@ -175,14 +217,12 @@ function renderReport(container, data) {
 
   const { metadata, periodos, resumo } = data;
 
-  // Cards de metadados e resumo
   const headerCards = el('div', { className: 'cards-grid' }, [
     renderMetadataCard(metadata),
     renderResumoCard(resumo),
   ]);
   container.appendChild(headerCards);
 
-  // Tabela por período
   if (periodos?.length) {
     const periodosSection = el('section', { className: 'periodos-list' }, [
       el('h3', {}, 'Disciplinas por Período'),
@@ -207,27 +247,15 @@ function renderMetadataCard(metadata) {
     .filter(([, value]) => value)
     .map(([label, value]) => el('p', {}, [el('strong', {}, `${label}: `), value]));
 
-  return el('div', { className: 'card' }, [
-    el('h3', {}, 'Dados do Aluno'),
-    ...items,
-  ]);
+  return el('div', { className: 'card' }, [el('h3', {}, 'Dados do Aluno'), ...items]);
 }
 
 function renderResumoCard(resumo) {
   return el('div', { className: 'card' }, [
     el('h3', {}, 'Resumo do CR'),
-    el('p', {}, [
-      el('strong', {}, 'Créditos com grau: '),
-      resumo.crRComGrau?.toFixed(1) ?? '-',
-    ]),
-    el('p', {}, [
-      el('strong', {}, 'Pontos totais: '),
-      resumo.pontosTotais?.toFixed(1) ?? '-',
-    ]),
-    el('p', {}, [
-      el('strong', {}, 'CR calculado: '),
-      resumo.crCalculado?.toFixed(3) ?? '-',
-    ]),
+    el('p', {}, [el('strong', {}, 'Créditos com grau: '), resumo.crRComGrau?.toFixed(1) ?? '-']),
+    el('p', {}, [el('strong', {}, 'Pontos totais: '), resumo.pontosTotais?.toFixed(1) ?? '-']),
+    el('p', {}, [el('strong', {}, 'CR calculado: '), resumo.crCalculado?.toFixed(3) ?? '-']),
   ]);
 }
 
@@ -235,7 +263,11 @@ function renderPeriodo(periodo) {
   const crPeriodo = calcularCRAcumulado({ periodos: [periodo] });
   const header = el('button', { className: 'periodo-header' }, [
     el('span', {}, periodo.periodo || 'Período não identificado'),
-    el('span', {}, `CR: ${crPeriodo.crCalculado.toFixed(3)} — ${periodo.disciplinas.length} disciplinas`),
+    el(
+      'span',
+      {},
+      `CR: ${crPeriodo.crCalculado.toFixed(3)} — ${periodo.disciplinas.length} disciplinas`
+    ),
   ]);
 
   const table = el('table', {}, [
@@ -261,7 +293,9 @@ function renderPeriodo(periodo) {
           el('td', {}, d.crR?.toString?.() ?? '-'),
           el('td', {}, d.grau?.toString?.() ?? '-'),
           el('td', {}, d.pontos?.toString?.() ?? '-'),
-          el('td', {}, [el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` }, d.situacao)]),
+          el('td', {}, [
+            el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` }, d.situacao),
+          ]),
         ])
       )
     ),
@@ -274,6 +308,382 @@ function renderPeriodo(periodo) {
   });
 
   return el('div', { className: 'card periodo-card' }, [header, body]);
+}
+
+/* ============================================================
+   Simulador de Período Atual
+   ============================================================ */
+
+function initSimulator() {
+  const container = document.getElementById('pdf-simulator-content');
+  if (!container) return;
+
+  renderSimulator(container);
+}
+
+function renderSimulator(container) {
+  clearElement(container);
+
+  const baseResumo = state.historyData?.resumo || { crRComGrau: 0, pontosTotais: 0, crCalculado: 0 };
+
+  const table = renderDisciplinasTable(state.simulatorDisciplinas, (updated) => {
+    state.simulatorDisciplinas = updated;
+    renderSimulator(container);
+  });
+
+  const novoCR = calcularCRAcumulado(state.historyData || {}, state.simulatorDisciplinas);
+  const impacto = calcularImpactoCR(baseResumo.crCalculado, novoCR.crCalculado);
+
+  const resumo = el('div', { className: 'cards-grid' }, [
+    el('div', { className: 'card' }, [
+      el('h4', {}, 'CR do Período'),
+      el('p', {}, calcularCRDisciplinas(state.simulatorDisciplinas).crCalculado.toFixed(3)),
+    ]),
+    el('div', { className: 'card' }, [
+      el('h4', {}, 'Novo CR Acumulado'),
+      el('p', {}, novoCR.crCalculado.toFixed(3)),
+    ]),
+    el('div', { className: 'card' }, [
+      el('h4', {}, 'Impacto no CR'),
+      el('p', {}, `${impacto.absoluto >= 0 ? '+' : ''}${impacto.absoluto.toFixed(3)} (${impacto.percentual.toFixed(2)}%)`),
+    ]),
+  ]);
+
+  const metaSection = renderMetaReversa(baseResumo, state.simulatorDisciplinas);
+
+  const actions = el('div', { className: 'actions-row' }, [
+    el(
+      'button',
+      { className: 'btn btn-primary', type: 'button', onclick: () => addSimulatorRow(container) },
+      [el('i', { className: 'bi bi-plus-lg' }), ' Adicionar disciplina']
+    ),
+    el(
+      'button',
+      { className: 'btn btn-secondary', type: 'button', onclick: () => importBOAForSimulator(container) },
+      [el('i', { className: 'bi bi-file-earmark-pdf' }), ' Importar pendências do BOA']
+    ),
+    el(
+      'button',
+      { className: 'btn btn-danger', type: 'button', onclick: () => { state.simulatorDisciplinas = []; renderSimulator(container); } },
+      [el('i', { className: 'bi bi-trash' }), ' Limpar']
+    ),
+  ]);
+
+  container.appendChild(actions);
+  container.appendChild(table);
+  container.appendChild(resumo);
+  container.appendChild(metaSection);
+}
+
+function renderDisciplinasTable(disciplinas, onChange) {
+  const table = el('table', {}, [
+    el('thead', {}, [
+      el('tr', {}, [
+        el('th', {}, 'Código'),
+        el('th', {}, 'Nome'),
+        el('th', {}, 'CrR'),
+        el('th', {}, 'Nota prevista'),
+        el('th', {}, 'Ações'),
+      ]),
+    ]),
+    el(
+      'tbody',
+      {},
+      disciplinas.length
+        ? disciplinas.map((d, i) => renderDisciplinaRow(d, i, disciplinas, onChange))
+        : [el('tr', {}, [el('td', { colspan: 5, className: 'text-muted' }, 'Nenhuma disciplina adicionada.')])]
+    ),
+  ]);
+
+  return el('div', { className: 'table-container' }, [table]);
+}
+
+function renderDisciplinaRow(disciplina, index, disciplinas, onChange) {
+  const updateField = (field, value) => {
+    const updated = [...disciplinas];
+    if (field === 'crR' || field === 'grau') {
+      updated[index][field] = value === '' ? 0 : parseFloat(value);
+      if (field === 'grau') {
+        updated[index].pontos = updated[index].grau * updated[index].crR;
+      }
+      if (field === 'crR') {
+        updated[index].pontos = updated[index].grau * updated[index].crR;
+      }
+    } else {
+      updated[index][field] = value;
+    }
+    updated[index].situacao = 'Cursando';
+    updated[index].conferGrau = true;
+    onChange(updated);
+  };
+
+  const removeRow = () => {
+    const updated = disciplinas.filter((_, i) => i !== index);
+    onChange(updated);
+  };
+
+  return el('tr', {}, [
+    el('td', {}, [
+      el('input', {
+        type: 'text',
+        value: disciplina.codigo || '',
+        placeholder: 'Código',
+        oninput: (e) => updateField('codigo', e.target.value),
+      }),
+    ]),
+    el('td', {}, [
+      el('input', {
+        type: 'text',
+        value: disciplina.nome || '',
+        placeholder: 'Nome da disciplina',
+        oninput: (e) => updateField('nome', e.target.value),
+      }),
+    ]),
+    el('td', {}, [
+      el('input', {
+        type: 'number',
+        value: disciplina.crR || '',
+        min: 0,
+        step: 0.5,
+        placeholder: 'CrR',
+        oninput: (e) => updateField('crR', e.target.value),
+      }),
+    ]),
+    el('td', {}, [
+      el('input', {
+        type: 'number',
+        value: disciplina.grau || '',
+        min: 0,
+        max: 10,
+        step: 0.1,
+        placeholder: 'Nota',
+        oninput: (e) => updateField('grau', e.target.value),
+      }),
+    ]),
+    el('td', {}, [
+      el(
+        'button',
+        { className: 'btn btn-danger', type: 'button', onclick: removeRow },
+        [el('i', { className: 'bi bi-trash' })]
+      ),
+    ]),
+  ]);
+}
+
+function addSimulatorRow(container) {
+  state.simulatorDisciplinas.push({
+    codigo: '',
+    nome: '',
+    crR: 0,
+    grau: 0,
+    pontos: 0,
+    situacao: 'Cursando',
+    conferGrau: true,
+  });
+  renderSimulator(container);
+}
+
+async function importBOAForSimulator(container) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf,application/pdf';
+
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const { obrigatorias } = await processarBOA(arrayBuffer);
+      const pendentes = obrigatorias.filter((d) => d.status === 'pendente' || d.status === 'cursando');
+
+      pendentes.forEach((d) => {
+        state.simulatorDisciplinas.push({
+          codigo: d.codigo,
+          nome: d.nome,
+          crR: d.crR,
+          grau: 0,
+          pontos: 0,
+          situacao: 'Cursando',
+          conferGrau: true,
+        });
+      });
+
+      renderSimulator(container);
+    } catch (err) {
+      alert('Erro ao processar BOA: ' + err.message);
+    }
+  });
+
+  input.click();
+}
+
+function renderMetaReversa(baseResumo, disciplinasPreenchidas) {
+  const crAlvoInput = el('input', { type: 'number', min: 0, max: 10, step: 0.001, value: '7.0' });
+  const crRRestantesInput = el('input', { type: 'number', min: 0, step: 0.5, value: '0' });
+  const resultEl = el('p', { className: 'text-muted' }, 'Preencha os campos para calcular a média necessária.');
+
+  const calcular = () => {
+    const crAlvo = parseFloat(crAlvoInput.value);
+    const crRRestantes = parseFloat(crRRestantesInput.value);
+    if (isNaN(crAlvo)) return;
+
+    const media = calcularMetaReversa(crAlvo, state.historyData, disciplinasPreenchidas, [
+      { crR: crRRestantes },
+    ]);
+
+    if (media === null) {
+      resultEl.textContent = 'Adicione créditos restantes para calcular a meta.';
+      return;
+    }
+
+    if (media < 0) {
+      resultEl.textContent = `Nota necessária: ${media.toFixed(3)} (já está acima do CR alvo com as notas atuais).`;
+    } else if (media > 10) {
+      resultEl.textContent = `Nota necessária: ${media.toFixed(3)} (impossível atingir com apenas nota 10).`;
+    } else {
+      resultEl.textContent = `Nota necessária nas disciplinas restantes: ${media.toFixed(3)}`;
+    }
+  };
+
+  crAlvoInput.addEventListener('input', calcular);
+  crRRestantesInput.addEventListener('input', calcular);
+
+  return el('div', { className: 'card' }, [
+    el('h4', {}, 'Meta Reversa'),
+    el('p', { className: 'text-muted' }, 'Descubra a média necessária nas disciplinas restantes para atingir um CR alvo.'),
+    el('div', { className: 'form-row' }, [
+      el('label', {}, ['CR alvo: ', crAlvoInput]),
+      el('label', {}, ['Créditos restantes: ', crRRestantesInput]),
+    ]),
+    resultEl,
+  ]);
+}
+
+/* ============================================================
+   Cálculo Rápido
+   ============================================================ */
+
+function initQuickCalculator() {
+  const container = document.getElementById('quick-calculator-content');
+  if (!container) return;
+
+  const crAtualInput = el('input', { type: 'number', min: 0, max: 10, step: 0.001, value: '' });
+  const crRAtualInput = el('input', { type: 'number', min: 0, step: 0.5, value: '' });
+  const pontosAtuaisInput = el('input', { type: 'number', min: 0, step: 0.1, value: '' });
+  const useCRRadio = el('input', { type: 'radio', name: 'base-mode', value: 'cr', checked: true });
+  const usePontosRadio = el('input', { type: 'radio', name: 'base-mode', value: 'pontos' });
+
+  const disciplinas = [];
+  const tableContainer = el('div', {}, []);
+
+  const renderResult = () => {
+    clearElement(tableContainer);
+
+    let crRBase = 0;
+    let pontosBase = 0;
+
+    if (usePontosRadio.checked) {
+      crRBase = parseFloat(crRAtualInput.value) || 0;
+      pontosBase = parseFloat(pontosAtuaisInput.value) || 0;
+    } else {
+      const cr = parseFloat(crAtualInput.value) || 0;
+      const crR = parseFloat(crRAtualInput.value) || 0;
+      crRBase = crR;
+      pontosBase = cr * crR;
+    }
+
+    const extras = calcularCRDisciplinas(disciplinas);
+    const crRTotal = crRBase + extras.crRComGrau;
+    const pontosTotal = pontosBase + extras.pontosTotais;
+    const crNovo = crRTotal ? pontosTotal / crRTotal : 0;
+    const crPeriodo = extras.crCalculado;
+    const impacto = calcularImpactoCR(crRBase ? pontosBase / crRBase : 0, crNovo);
+
+    tableContainer.appendChild(
+      el('div', { className: 'cards-grid' }, [
+        el('div', { className: 'card' }, [
+          el('h4', {}, 'CR Atual'),
+          el('p', {}, crRBase ? (pontosBase / crRBase).toFixed(3) : '-'),
+        ]),
+        el('div', { className: 'card' }, [
+          el('h4', {}, 'CR do Período'),
+          el('p', {}, crPeriodo.toFixed(3)),
+        ]),
+        el('div', { className: 'card' }, [
+          el('h4', {}, 'Novo CR'),
+          el('p', {}, crNovo.toFixed(3)),
+        ]),
+        el('div', { className: 'card' }, [
+          el('h4', {}, 'Impacto'),
+          el(
+            'p',
+            {},
+            `${impacto.absoluto >= 0 ? '+' : ''}${impacto.absoluto.toFixed(3)} (${impacto.percentual.toFixed(2)}%)`
+          ),
+        ]),
+      ])
+    );
+  };
+
+  const updateDisciplinas = (updated) => {
+    disciplinas.length = 0;
+    disciplinas.push(...updated);
+    renderResult();
+  };
+
+  const addDisciplina = () => {
+    disciplinas.push({ codigo: '', nome: '', crR: 0, grau: 0, pontos: 0, situacao: 'Cursando', conferGrau: true });
+    renderTable();
+  };
+
+  const renderTable = () => {
+    clearElement(tableContainer);
+    tableContainer.appendChild(
+      renderDisciplinasTable(disciplinas, (updated) => {
+        updateDisciplinas(updated);
+        renderTable();
+      })
+    );
+    renderResult();
+  };
+
+  const modeChange = () => {
+    crAtualInput.disabled = usePontosRadio.checked;
+    pontosAtuaisInput.disabled = !usePontosRadio.checked;
+    renderResult();
+  };
+
+  useCRRadio.addEventListener('change', modeChange);
+  usePontosRadio.addEventListener('change', modeChange);
+  crAtualInput.addEventListener('input', renderResult);
+  crRAtualInput.addEventListener('input', renderResult);
+  pontosAtuaisInput.addEventListener('input', renderResult);
+
+  const baseForm = el('div', { className: 'card' }, [
+    el('h4', {}, 'Base Atual'),
+    el('div', { className: 'form-row' }, [
+      el('label', {}, [useCRRadio, ' CR atual + Créditos']),
+      el('label', {}, [usePontosRadio, ' Pontos + Créditos']),
+    ]),
+    el('div', { className: 'form-row' }, [
+      el('label', {}, ['CR atual: ', crAtualInput]),
+      el('label', {}, ['Créditos: ', crRAtualInput]),
+      el('label', {}, ['Pontos: ', pontosAtuaisInput]),
+    ]),
+  ]);
+
+  const actions = el('div', { className: 'actions-row' }, [
+    el('button', { className: 'btn btn-primary', type: 'button', onclick: addDisciplina }, [
+      el('i', { className: 'bi bi-plus-lg' }),
+      ' Adicionar disciplina',
+    ]),
+  ]);
+
+  modeChange();
+  container.appendChild(baseForm);
+  container.appendChild(actions);
+  container.appendChild(tableContainer);
+  renderTable();
 }
 
 init();
