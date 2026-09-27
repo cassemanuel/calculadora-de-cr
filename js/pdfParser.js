@@ -45,7 +45,7 @@ export async function extractTextFromPDF(pdfData, onProgress) {
 }
 
 function agruparItensPorLinha(items) {
-  const TOLERANCIA_Y = 2;
+  const TOLERANCIA_Y = 4;
   const grupos = [];
 
   for (const item of items) {

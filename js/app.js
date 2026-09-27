@@ -749,13 +749,86 @@ function initQuickCalculator() {
 
   const renderTable = () => {
     clearElement(tableContainer);
-    tableContainer.appendChild(
-      renderDisciplinasTable(disciplinas, (updated) => {
-        updateDisciplinas(updated);
-        renderTable();
-      })
-    );
+    tableContainer.appendChild(renderQuickTable(disciplinas));
     renderResult();
+  };
+
+  function renderQuickTable(items) {
+    const table = el('table', {}, [
+      el('thead', {}, [
+        el('tr', {}, [
+          el('th', {}, 'Código'),
+          el('th', {}, 'Disciplina'),
+          el('th', {}, 'CrR'),
+          el('th', {}, 'Nota'),
+          el('th', {}, ''),
+        ]),
+      ]),
+    ]);
+    const tbody = el('tbody', {});
+
+    if (items.length === 0) {
+      tbody.appendChild(el('tr', {}, [el('td', { colspan: 5, className: 'text-muted' }, 'Nenhuma disciplina adicionada.')]));
+    } else {
+      items.forEach((disciplina, index) => {
+        tbody.appendChild(
+          el('tr', {}, [
+            el('td', {}, [
+              el('input', {
+                type: 'text',
+                value: disciplina.codigo || '',
+                placeholder: 'Código',
+                oninput: (e) => updateDisciplinaField(index, 'codigo', e.target.value),
+              }),
+            ]),
+            el('td', {}, [
+              el('input', {
+                type: 'text',
+                value: disciplina.nome || '',
+                placeholder: 'Nome da disciplina',
+                oninput: (e) => updateDisciplinaField(index, 'nome', e.target.value),
+              }),
+            ]),
+            el('td', {}, [
+              el('input', {
+                type: 'text',
+                value: disciplina.crR || '',
+                placeholder: 'CrR',
+                oninput: (e) => updateDisciplinaField(index, 'crR', e.target.value),
+              }),
+            ]),
+            el('td', {}, [
+              el('input', {
+                type: 'text',
+                value: disciplina.grau || '',
+                placeholder: 'Nota',
+                oninput: (e) => updateDisciplinaField(index, 'grau', e.target.value),
+              }),
+            ]),
+            el('td', {}, [
+              el(
+                'button',
+                {
+                  type: 'button',
+                  className: 'btn btn-icon btn-danger',
+                  title: 'Remover',
+                  onclick: () => removeDisciplina(index),
+                },
+                [el('i', { className: 'bi bi-trash' })]
+              ),
+            ]),
+          ])
+        );
+      });
+    }
+
+    table.appendChild(tbody);
+    return table;
+  }
+
+  const removeDisciplina = (index) => {
+    disciplinas.splice(index, 1);
+    renderTable();
   };
 
   const modeChange = () => {
