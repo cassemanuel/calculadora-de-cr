@@ -4,7 +4,8 @@
  *
  * O mapa cobre os códigos do currículo novo (2022/2) e os códigos
  * equivalentes do currículo antigo. O fallback por prefixo classifica
- * disciplinas de outras unidades; o que sobrar cai em "Outros".
+ * disciplinas de outras unidades; o que sobrar cai em "Livre Escolha"
+ * (eixo do PPC para disciplinas fora do elenco do BCC).
  */
 
 import { disciplinaConferGrau } from './calculator.js';
@@ -15,7 +16,7 @@ export const EIXOS = {
   ENGENHARIA: 'Engenharia de Software e Aplicações',
   DADOS: 'Ciência de Dados e Computação Científica',
   GERAL: 'Formação Humana, Social e Complementar',
-  OUTROS: 'Outros',
+  LIVRE_ESCOLHA: 'Livre Escolha',
 };
 
 const MAPA_EIXOS = {
@@ -177,13 +178,13 @@ export function eixoDaDisciplina(codigo) {
   for (const [regex, eixo] of PREFIXOS_EIXOS) {
     if (regex.test(cod)) return eixo;
   }
-  return EIXOS.OUTROS;
+  return EIXOS.LIVRE_ESCOLHA;
 }
 
 /**
  * Agrupa as disciplinas concluídas por eixo e calcula métricas.
  * @param {object} historyData
- * @returns {Array<{eixo: string, cr: number, crRComGrau: number, creditosTotais: number, total: number}>}
+ * @returns {Array<{eixo: string, cr: number, crRComGrau: number, creditosTotais: number, total: number, disciplinas: Array}>}
  */
 export function calcularMetricasPorEixo(historyData) {
   const grupos = new Map();
@@ -192,10 +193,11 @@ export function calcularMetricasPorEixo(historyData) {
     (periodo.disciplinas || []).forEach((d) => {
       const eixo = eixoDaDisciplina(d.codigo);
       if (!grupos.has(eixo)) {
-        grupos.set(eixo, { eixo, pontos: 0, crRComGrau: 0, creditosTotais: 0, total: 0 });
+        grupos.set(eixo, { eixo, pontos: 0, crRComGrau: 0, creditosTotais: 0, total: 0, disciplinas: [] });
       }
       const g = grupos.get(eixo);
       g.total += 1;
+      g.disciplinas.push({ ...d, periodo: periodo.periodo });
       const crR = Number(d.crR);
       if (!isNaN(crR)) g.creditosTotais += crR;
       if (disciplinaConferGrau(d)) {

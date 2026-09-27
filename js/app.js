@@ -978,6 +978,7 @@ function renderAnalytics() {
     crPeriodo: calcularCRAcumulado({ periodos: [periodo] }).crCalculado,
     crAcumulado: calcularCRAcumulado({ periodos: periodos.slice(0, index + 1) }).crCalculado,
     crRComGrau: calcularCRAcumulado({ periodos: [periodo] }).crRComGrau,
+    disciplinas: periodo.disciplinas || [],
   }));
 
   container.appendChild(renderChartCard(pontos));
@@ -988,7 +989,7 @@ function renderAnalytics() {
 function renderChartCard(pontos) {
   const largura = 720;
   const altura = 320;
-  const margem = { topo: 20, direita: 20, base: 62, esquerda: 45 };
+  const margem = { topo: 20, direita: 20, base: 74, esquerda: 45 };
   const w = largura - margem.esquerda - margem.direita;
   const h = altura - margem.topo - margem.base;
 
@@ -1023,37 +1024,86 @@ function renderChartCard(pontos) {
   // Rótulos do eixo X (rotacionados para não encavalarem).
   pontos.forEach((p, i) => {
     svg.appendChild(svgEl('text', {
-      x: x(i), y: altura - 10,
+      x: x(i), y: altura - 14,
       'text-anchor': 'end',
-      transform: `rotate(-35 ${x(i)} ${altura - 10})`,
-      class: 'chart-label',
+      transform: `rotate(-35 ${x(i)} ${altura - 14})`,
+      class: 'chart-label chart-label-x',
     }, p.periodo));
   });
 
   const toPoints = (key) =>
     pontos.map((p, i) => `${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ');
 
-  // Linha do CR do período (tracejada).
+  // Linha do CR do período (tracejada). Os atributos de traço ficam explícitos
+  // para que a linha continue visível mesmo se o CSS do gráfico não aplicar.
   svg.appendChild(svgEl('polyline', {
     points: toPoints('crPeriodo'),
     fill: 'none',
+    stroke: '#f59e0b',
+    'stroke-width': '2',
+    'stroke-dasharray': '4,4',
     class: 'chart-line chart-line-periodo',
   }));
   // Linha do CR acumulado (contínua).
   svg.appendChild(svgEl('polyline', {
     points: toPoints('crAcumulado'),
     fill: 'none',
+    stroke: 'var(--cor-ic1)',
+    'stroke-width': '3',
     class: 'chart-line chart-line-acumulado',
   }));
 
-  // Pontos interativos com tooltip.
+  const tooltip = el('div', { className: 'chart-tooltip', role: 'tooltip' });
+  tooltip.style.display = 'none';
+
+  const wrap = el('div', { className: 'chart-wrap' }, [svg, tooltip]);
+
+  const hideTooltip = () => {
+    tooltip.style.display = 'none';
+  };
+
+  const positionTooltip = (clientX, clientY) => {
+    const rect = wrap.getBoundingClientRect();
+    let tx = clientX - rect.left + 14;
+    let ty = clientY - rect.top + 14;
+    if (tx + tooltip.offsetWidth > rect.width - 8) tx = clientX - rect.left - tooltip.offsetWidth - 14;
+    if (ty + tooltip.offsetHeight > rect.height - 8) ty = clientY - rect.top - tooltip.offsetHeight - 14;
+    tooltip.style.left = `${Math.max(8, tx)}px`;
+    tooltip.style.top = `${Math.max(8, ty)}px`;
+  };
+
+  const showTooltip = (index, clientX, clientY) => {
+    clearElement(tooltip);
+    tooltip.appendChild(buildChartTooltip(pontos, index));
+    tooltip.style.display = 'block';
+    positionTooltip(clientX, clientY);
+  };
+
+  // Pontos interativos com tooltip rico.
   pontos.forEach((p, i) => {
-    svg.appendChild(svgEl('circle', {
-      cx: x(i), cy: y(p.crAcumulado), r: 4, class: 'chart-dot chart-dot-acumulado',
-    }, svgEl('title', {}, `${p.periodo} — CR acumulado: ${formatNumberBR(p.crAcumulado, 3)}`)));
-    svg.appendChild(svgEl('circle', {
-      cx: x(i), cy: y(p.crPeriodo), r: 4, class: 'chart-dot chart-dot-periodo',
-    }, svgEl('title', {}, `${p.periodo} — CR do período: ${formatNumberBR(p.crPeriodo, 3)}`)));
+    [
+      { cy: y(p.crAcumulado), cls: 'chart-dot-acumulado', cor: 'var(--chart-acum)', rotulo: 'CR acumulado' },
+      { cy: y(p.crPeriodo), cls: 'chart-dot-periodo', cor: 'var(--chart-periodo)', rotulo: 'CR do período' },
+    ].forEach(({ cy, cls, cor, rotulo }) => {
+      const dot = svgEl('circle', {
+        cx: x(i), cy, r: 5,
+        class: `chart-dot ${cls}`,
+        fill: 'var(--bg-card)',
+        stroke: cor,
+        'stroke-width': '2',
+        tabindex: '0',
+        'aria-label': `${p.periodo} — ${rotulo}`,
+      });
+      dot.addEventListener('mouseenter', (e) => showTooltip(i, e.clientX, e.clientY));
+      dot.addEventListener('mousemove', (e) => positionTooltip(e.clientX, e.clientY));
+      dot.addEventListener('mouseleave', hideTooltip);
+      dot.addEventListener('focus', () => {
+        const r = dot.getBoundingClientRect();
+        showTooltip(i, r.left + r.width / 2, r.top + r.height / 2);
+      });
+      dot.addEventListener('blur', hideTooltip);
+      svg.appendChild(dot);
+    });
   });
 
   const legenda = el('div', { className: 'chart-legenda' }, [
@@ -1069,9 +1119,49 @@ function renderChartCard(pontos) {
 
   return el('div', { className: 'card' }, [
     el('h3', {}, 'Evolução do CR'),
-    svg,
+    wrap,
     legenda,
   ]);
+}
+
+function buildChartTooltip(pontos, index) {
+  const p = pontos[index];
+  const delta = index > 0 ? p.crAcumulado - pontos[index - 1].crAcumulado : null;
+
+  const stats = el('div', { className: 'chart-tooltip-stats' }, [
+    el('span', {}, ['CR período: ', el('strong', {}, formatNumberBR(p.crPeriodo, 2))]),
+    el('span', {}, ['CR acumulado: ', el('strong', {}, formatNumberBR(p.crAcumulado, 2))]),
+  ]);
+  if (delta !== null) {
+    stats.appendChild(
+      el(
+        'span',
+        { className: `chart-tooltip-delta ${delta >= 0 ? 'delta-up' : 'delta-down'}` },
+        `Variação do CR: ${delta >= 0 ? '+' : ''}${formatNumberBR(delta, 2)}`
+      )
+    );
+  }
+
+  const children = [
+    el('div', { className: 'chart-tooltip-title' }, p.periodo),
+    stats,
+  ];
+
+  if (p.disciplinas?.length) {
+    children.push(
+      el('ul', { className: 'chart-tooltip-disciplinas' },
+        p.disciplinas.map((d) =>
+          el('li', {}, [
+            el('span', { className: 'chart-tooltip-cod' }, d.codigo || '—'),
+            ` ${d.nome || 'Disciplina'} — `,
+            el('strong', {}, d.grau != null ? formatNumberBR(d.grau, 1) : '—'),
+          ])
+        )
+      )
+    );
+  }
+
+  return el('div', {}, children);
 }
 
 function renderMetricasHistoricas(periodos, resumo, pontos) {
@@ -1121,17 +1211,74 @@ function renderEixosCard(data) {
 
   return el('div', {}, [
     el('h3', {}, 'Desempenho por Eixo Temático'),
-    el('div', { className: 'cards-grid' },
-      eixos.map((eixo) =>
-        el('div', { className: 'card metric-card' }, [
-          el('h4', {}, eixo.eixo),
-          el('p', { className: 'metric-value' }, formatNumberBR(eixo.cr, 3)),
-          el('p', { className: 'text-muted' },
-            `${eixo.total} disciplinas · ${formatNumberBR(eixo.creditosTotais, 0)} créditos`),
-        ])
-      )
+    el('p', { className: 'text-muted' }, 'Clique em um eixo para ver as disciplinas cursadas.'),
+    el('div', { className: 'cards-grid eixos-grid' },
+      eixos.map((eixo) => renderEixoCard(eixo))
     ),
   ]);
+}
+
+function renderEixoCard(eixo) {
+  const disciplinas = [...(eixo.disciplinas || [])]
+    .sort((a, b) => periodoKey(a.periodo) - periodoKey(b.periodo));
+
+  const body = el('div', { className: 'eixo-body hidden' }, [
+    el('div', { className: 'table-container' }, [
+      el('table', {}, [
+        el('thead', {}, [
+          el('tr', {}, [
+            el('th', {}, 'Código'),
+            el('th', {}, 'Nome'),
+            el('th', {}, 'Período'),
+            el('th', {}, 'Créditos'),
+            el('th', {}, 'Grau'),
+            el('th', {}, 'SF'),
+          ]),
+        ]),
+        el('tbody', {},
+          disciplinas.length
+            ? disciplinas.map((d) =>
+                el('tr', { className: d.conferGrau ? '' : 'row-muted' }, [
+                  el('td', {}, d.codigo || '—'),
+                  el('td', {}, d.nome || '—'),
+                  el('td', {}, d.periodo || '—'),
+                  el('td', {}, formatNumberBR(d.crR, 1)),
+                  el('td', {}, d.grau != null ? formatNumberBR(d.grau, 1) : '—'),
+                  el('td', {}, [
+                    el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` },
+                      d.situacao || '—'),
+                  ]),
+                ])
+              )
+            : [el('tr', {}, [
+                el('td', { colspan: 6, className: 'text-muted' }, 'Nenhuma disciplina registrada.'),
+              ])]
+        ),
+      ]),
+    ]),
+  ]);
+
+  const header = el('button', {
+    className: 'eixo-header',
+    type: 'button',
+    'aria-expanded': 'false',
+  }, [
+    el('div', { className: 'eixo-resumo' }, [
+      el('h4', {}, eixo.eixo),
+      el('p', { className: 'metric-value' }, formatNumberBR(eixo.cr, 3)),
+      el('p', { className: 'text-muted' },
+        `${eixo.total} disciplinas · ${formatNumberBR(eixo.creditosTotais, 0)} créditos`),
+    ]),
+    el('i', { className: 'bi bi-chevron-down eixo-chevron', 'aria-hidden': 'true' }),
+  ]);
+
+  header.addEventListener('click', () => {
+    const aberto = !body.classList.toggle('hidden');
+    header.classList.toggle('open', aberto);
+    header.setAttribute('aria-expanded', String(aberto));
+  });
+
+  return el('div', { className: 'card metric-card eixo-card' }, [header, body]);
 }
 
 init();
