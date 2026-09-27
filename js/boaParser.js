@@ -32,14 +32,16 @@ function extractNome(texto, idxCodigo) {
 
   // Padrão: CH Período Nome Créditos (ex: "60 4Comput ... 4.0").
   const match = trecho.match(/^(\d+)\s+(\d)\s*(.*?)\s*(\d+\.\d)$/);
-  if (match) return match[3].trim();
+  if (match) {
+    return match[3].replace(/^\d+\s+/, '').trim();
+  }
 
   // Fallback: nome entre o primeiro número e o último decimal.
   const numeros = [...trecho.matchAll(/\d+\.\d|\d+/g)];
   if (numeros.length >= 2) {
     const inicio = numeros[0].index + numeros[0][0].length;
     const fim = numeros[numeros.length - 1].index;
-    return trecho.slice(inicio, fim).trim();
+    return trecho.slice(inicio, fim).replace(/^\d+\s+/, '').trim();
   }
 
   return '';

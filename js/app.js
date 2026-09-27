@@ -133,6 +133,13 @@ function initDropzone() {
     });
   });
 
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    handlePDFUpload(file, { progress, progressBar, report });
+  });
+
   input.addEventListener('change', () => {
     const file = input.files?.[0];
     if (!file) return;
@@ -143,6 +150,10 @@ function initDropzone() {
 async function handlePDFUpload(file, { progress, progressBar, report }) {
   progress?.classList.remove('hidden');
   if (progressBar) progressBar.style.width = '0%';
+
+  const dropzoneLabel = document.querySelector('.dropzone-label span');
+  const dropzoneHint = document.querySelector('.dropzone-hint');
+  if (dropzoneLabel) dropzoneLabel.textContent = 'Processando...';
 
   // Evita que um cache antigo ou corrompido influencie o novo processamento.
   clearHistory();
@@ -160,8 +171,21 @@ async function handlePDFUpload(file, { progress, progressBar, report }) {
     saveHistory(data);
     renderReport(report, data);
 
+    if (dropzoneLabel) {
+      dropzoneLabel.textContent = `${file.name} carregado com sucesso`;
+    }
+    if (dropzoneHint) {
+      dropzoneHint.textContent = 'Relatório processado. Envie outro PDF para recomeçar.';
+    }
+
     console.log('Histórico parseado:', data);
   } catch (err) {
+    if (dropzoneLabel) {
+      dropzoneLabel.textContent = 'Clique ou arraste o PDF aqui';
+    }
+    if (dropzoneHint) {
+      dropzoneHint.textContent = 'PDF do SIGA/UFRJ (boletim ou histórico)';
+    }
     console.error(err);
     showError(report, err.message);
   } finally {
