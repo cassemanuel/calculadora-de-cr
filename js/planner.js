@@ -13,7 +13,12 @@
  */
 
 import { processarBOA } from './boaParser.js';
-import { calcularCRAcumulado, calcularCRDisciplinas } from './calculator.js';
+import {
+  calcularCRAcumulado,
+  calcularCRDisciplinas,
+  disciplinaConferGrau,
+} from './calculator.js';
+import { eixoDaDisciplina, EIXOS } from './eixos.js';
 import { loadPlanner, savePlanner } from './storage.js';
 import {
   el,
@@ -25,6 +30,17 @@ import {
 
 // Limites regulamentares de créditos por período no SIGA.
 const LIMITE_CREDITOS = Object.freeze({ MIN: 8, MAX: 28 });
+
+const CREDITOS_ELETIVA = 4;
+
+// Metas curriculares de eletivas do PPC 2022, usadas para gerar placeholders
+// genéricos no banco de pendências (o BOA lista optativas pelo código, o que
+// poluiria o planejamento — aqui contamos vagas restantes por categoria).
+const METAS_ELETIVAS = Object.freeze([
+  { codigo: 'ELETIVA-COND', nome: 'Eletiva Condicionada (Falta)', total: 8 },
+  { codigo: 'ELETIVA-HUM', nome: 'Eletiva de Humanas (Falta)', total: 1 },
+  { codigo: 'ELETIVA-LIVRE', nome: 'Eletiva Livre (Falta)', total: 2 },
+]);
 
 const PERIODO_REGEX = /^(\d{4})\s*\/\s*(\d)$/;
 
@@ -233,10 +249,12 @@ async function importarBOA(input) {
   try {
     validatePdfFile(file);
     const arrayBuffer = await file.arrayBuffer();
-    const { obrigatorias, optativas } = await processarBOA(arrayBuffer);
+    // Apenas obrigatórias pendentes são importadas — as optativas do BOA
+    // viram placeholders genéricos de eletivas (ver adicionarEletivasFaltantes).
+    const { obrigatorias } = await processarBOA(arrayBuffer);
 
     let adicionadas = 0;
-    [...obrigatorias, ...optativas].forEach((d) => {
+    obrigatorias.forEach((d) => {
       if (codigoExiste(String(d.codigo || '').toUpperCase())) return;
       planner.banco.push({
         codigo: d.codigo,
@@ -248,6 +266,8 @@ async function importarBOA(input) {
       adicionadas += 1;
     });
 
+    adicionadas += adicionarEletivasFaltantes();
+
     persistir();
     renderPlanner();
     if (!adicionadas) alert('Nenhuma disciplina pendente nova encontrada no BOA.');
@@ -257,6 +277,66 @@ async function importarBOA(input) {
   } finally {
     input.value = '';
   }
+}
+
+/**
+ * Conta quantas eletivas já existem no planejamento (banco ou semestres)
+ * em uma categoria de placeholder.
+ * @param {string} codigoBase Prefixo do código do placeholder.
+ * @returns {number}
+ */
+function contarPlaceholders(codigoBase) {
+  const todas = [
+    ...planner.banco,
+    ...planner.semestres.flatMap((s) => s.disciplinas),
+  ];
+  return todas.filter((d) => String(d.codigo || '').startsWith(codigoBase)).length;
+}
+
+/**
+ * Conta as eletivas já concluídas no histórico: disciplinas que conferem
+ * grau e caem no eixo Eletivas (fora do núcleo obrigatório do PPC).
+ * @returns {number}
+ */
+function contarEletivasConcluidas() {
+  const periodos = getHistoryData()?.periodos || [];
+  return periodos
+    .flatMap((p) => p.disciplinas || [])
+    .filter(
+      (d) => disciplinaConferGrau(d) && eixoDaDisciplina(d.codigo) === EIXOS.ELETIVAS
+    ).length;
+}
+
+/**
+ * Insere no banco placeholders genéricos das eletivas que ainda faltam,
+ * subtraindo das metas curriculares as eletivas já concluídas no histórico
+ * e os placeholders já existentes no planejamento. As eletivas concluídas
+ * abatem primeiro as condicionadas, depois as de humanas e por último as livres.
+ * @returns {number} Quantidade de placeholders adicionados.
+ */
+function adicionarEletivasFaltantes() {
+  let concluidasRestantes = contarEletivasConcluidas();
+  let adicionadas = 0;
+
+  METAS_ELETIVAS.forEach((meta) => {
+    const existentes = contarPlaceholders(meta.codigo);
+    const abatidas = Math.min(meta.total - existentes, concluidasRestantes);
+    concluidasRestantes -= Math.max(0, abatidas);
+    const faltam = meta.total - existentes - Math.max(0, abatidas);
+
+    for (let i = 0; i < faltam; i++) {
+      planner.banco.push({
+        codigo: `${meta.codigo}-${existentes + i + 1}`,
+        nome: meta.nome,
+        crR: CREDITOS_ELETIVA,
+        periodoRecomendado: null,
+        status: 'pendente',
+      });
+      adicionadas += 1;
+    }
+  });
+
+  return adicionadas;
 }
 
 /* ============================================================

@@ -1141,6 +1141,7 @@ table .btn {
 /* ----- Elegibilidade para Estágio ----- */
 .estagio-card {
   border-left: 4px solid var(--border-color);
+  margin-bottom: 2rem;
 }
 
 .estagio-card.estagio-apto {
