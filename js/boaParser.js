@@ -25,9 +25,10 @@ function detectarStatusPendente(line) {
   return null;
 }
 
-function hasNotaAprovacao(line) {
-  // Notas de aprovação no BOA aparecem como 5.0 a 10.0 na coluna direita.
-  return /\b([5-9]\.\d|10\.0)\b/.test(line);
+function hasAprovacaoExplicita(line) {
+  // Verifica se há situação "AP" explícita associada a algum código na linha.
+  // Isso evita capturar disciplinas já aprovadas na coluna de equivalências.
+  return /\bAP\b/.test(line);
 }
 
 function extractNome(texto, idxCodigo) {
@@ -135,8 +136,8 @@ export function parseBOA(text) {
     if (vistos.has(chave)) return;
     vistos.add(chave);
 
-    // Descarta linha que já contém nota de aprovação (matéria cursada/equivalente).
-    if (hasNotaAprovacao(line)) return;
+    // Descarta linha que já contém disciplina aprovada explicitamente.
+    if (hasAprovacaoExplicita(line)) return;
 
     const nome = extractNome(line, idxCodigo);
     const crR = extractCreditos(line, idxCodigo);

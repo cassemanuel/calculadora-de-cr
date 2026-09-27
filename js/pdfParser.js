@@ -10,7 +10,7 @@
 import { disciplinaConferGrau } from './calculator.js';
 
 const HEADER_REGEX = /CH\s+SFGrau\s+CrO\s+PontosPer[íi]odo\s+C[óo]digo\s+Nome\s+da\s+Disciplina\/RCC\s+CrR/i;
-const PERIODO_REGEX = /^\d{4}\s*\/\s*\d$|^\d{4}$/;
+const PERIODO_INICIO_REGEX = /^(\d{4}\s*\/\s*\d|\d{4})\b/;
 const CODIGO_SITUACAO_REGEX = /([A-Z]+\d+)\s+(AP|RM|RF|RFM|NCG|NCC|T|CURSANDO)$/i;
 const SITUACOES = ['AP', 'RM', 'RF', 'RFM', 'NCG', 'NCC', 'T', 'CURSANDO'];
 
@@ -307,7 +307,12 @@ function parseCampoDisciplina(value) {
  * @returns {boolean}
  */
 export function isPeriodoLine(line) {
-  return PERIODO_REGEX.test(line.trim());
+  return PERIODO_INICIO_REGEX.test(line.trim());
+}
+
+function extractPeriodoDaLinha(line) {
+  const match = line.trim().match(PERIODO_INICIO_REGEX);
+  return match ? match[1].replace(/\s/g, '') : null;
 }
 
 /**
@@ -340,28 +345,38 @@ export function parseHistorico(lines) {
     // Linhas de professores são ignoradas.
     if (line.startsWith('Prof.')) continue;
 
-    // Detecta início de período.
-    if (isPeriodoLine(line)) {
-      const periodoValor = line.trim();
+    // Detecta início de período no começo da linha.
+    const periodoDetectado = extractPeriodoDaLinha(line);
+    if (periodoDetectado) {
+      // Remove o período do início e tenta parsear o restante como disciplina.
+      const resto = line.trim().replace(PERIODO_INICIO_REGEX, '').trim();
 
       if (currentPeriodo) {
         if (currentPeriodo.disciplinas.length > 0) {
           if (!currentPeriodo.periodo) {
             // Período veio depois das disciplinas (primeiro bloco do boletim).
-            currentPeriodo.periodo = periodoValor;
+            currentPeriodo.periodo = periodoDetectado;
             periodos.push(currentPeriodo);
             currentPeriodo = null;
           } else {
             // Período já estava definido: finaliza o atual e inicia novo.
             periodos.push(currentPeriodo);
-            currentPeriodo = { periodo: periodoValor, disciplinas: [], totais: {} };
+            currentPeriodo = { periodo: periodoDetectado, disciplinas: [], totais: {} };
           }
         } else {
           // Período veio antes das disciplinas: define o período atual.
-          currentPeriodo.periodo = periodoValor;
+          currentPeriodo.periodo = periodoDetectado;
         }
       } else {
-        currentPeriodo = { periodo: periodoValor, disciplinas: [], totais: {} };
+        currentPeriodo = { periodo: periodoDetectado, disciplinas: [], totais: {} };
+      }
+
+      // Se sobrou texto após o período, tenta processar como disciplina.
+      if (resto) {
+        const disciplina = parseDisciplinaLine(resto);
+        if (disciplina && currentPeriodo) {
+          currentPeriodo.disciplinas.push(disciplina);
+        }
       }
 
       emTotais = false;
