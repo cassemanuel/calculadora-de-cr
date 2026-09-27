@@ -989,7 +989,7 @@ function renderAnalytics() {
 function renderChartCard(pontos) {
   const largura = 720;
   const altura = 320;
-  const margem = { topo: 20, direita: 20, base: 74, esquerda: 45 };
+  const margem = { topo: 20, direita: 20, base: 90, esquerda: 45 };
   const w = largura - margem.esquerda - margem.direita;
   const h = altura - margem.topo - margem.base;
 
@@ -1021,12 +1021,14 @@ function renderChartCard(pontos) {
     }, tick));
   }
 
-  // Rótulos do eixo X (rotacionados para não encavalarem).
+  // Rótulos do eixo X (rotacionados para não encavalarem; o texto cresce
+  // para baixo-esquerda a partir da âncora, então a baseline sobe o
+  // suficiente para não cortar na borda inferior do viewBox).
   pontos.forEach((p, i) => {
     svg.appendChild(svgEl('text', {
-      x: x(i), y: altura - 14,
+      x: x(i), y: altura - 26,
       'text-anchor': 'end',
-      transform: `rotate(-35 ${x(i)} ${altura - 14})`,
+      transform: `rotate(-35 ${x(i)} ${altura - 26})`,
       class: 'chart-label chart-label-x',
     }, p.periodo));
   });
@@ -1229,7 +1231,6 @@ function renderEixoCard(eixo) {
           el('tr', {}, [
             el('th', {}, 'Código'),
             el('th', {}, 'Nome'),
-            el('th', {}, 'Período'),
             el('th', {}, 'Créditos'),
             el('th', {}, 'Grau'),
             el('th', {}, 'SF'),
@@ -1241,7 +1242,6 @@ function renderEixoCard(eixo) {
                 el('tr', { className: d.conferGrau ? '' : 'row-muted' }, [
                   el('td', {}, d.codigo || '—'),
                   el('td', {}, d.nome || '—'),
-                  el('td', {}, d.periodo || '—'),
                   el('td', {}, formatNumberBR(d.crR, 1)),
                   el('td', {}, d.grau != null ? formatNumberBR(d.grau, 1) : '—'),
                   el('td', {}, [
@@ -1251,7 +1251,7 @@ function renderEixoCard(eixo) {
                 ])
               )
             : [el('tr', {}, [
-                el('td', { colspan: 6, className: 'text-muted' }, 'Nenhuma disciplina registrada.'),
+                el('td', { colspan: 5, className: 'text-muted' }, 'Nenhuma disciplina registrada.'),
               ])]
         ),
       ]),

@@ -12,7 +12,7 @@ import { disciplinaConferGrau } from './calculator.js';
 
 export const EIXOS = {
   TEORIA: 'Teoria da Computação e Matemática',
-  SISTEMAS: 'Sistemas e Comunicação',
+  SISTEMAS: 'Sistemas Computacionais e Comunicação',
   ENGENHARIA: 'Engenharia de Software e Aplicações',
   DADOS: 'Ciência de Dados e Computação Científica',
   GERAL: 'Formação Humana, Social e Complementar',
@@ -37,6 +37,7 @@ const MAPA_EIXOS = {
   ICP035: EIXOS.TEORIA, // Tóp Esp em Teoria da Comput I
   ICP036: EIXOS.TEORIA, // Tóp Esp em Teoria da Comput II
   MAB624: EIXOS.TEORIA, // Números Inteiros e Criptografia
+  ICP134: EIXOS.TEORIA, // Números Inteiros e Criptografia (PPC 2022)
   MAE111: EIXOS.TEORIA, // Cálculo Infinitesimal I
   MAE992: EIXOS.TEORIA, // Cálculo Integ e Diferencial II
   MAE993: EIXOS.TEORIA, // Cálculo III
@@ -78,7 +79,6 @@ const MAPA_EIXOS = {
   ICP491: EIXOS.ENGENHARIA, // Banco de Dados II
   ICP041: EIXOS.ENGENHARIA,
   ICP042: EIXOS.ENGENHARIA,
-  ICP134: EIXOS.ENGENHARIA,
   ICP142: EIXOS.ENGENHARIA,
   ICP143: EIXOS.ENGENHARIA, // Projeto Prático
   MAB113: EIXOS.ENGENHARIA, // Organização da Informação
@@ -155,15 +155,32 @@ const MAPA_EIXOS = {
   ICPX04: EIXOS.GERAL,
   ICPX06: EIXOS.GERAL, // Atividades Complementares
   ICPZ55: EIXOS.GERAL, // Extensão
-  CMT001: EIXOS.GERAL, // Estágio Dirigido
-  NCG011: EIXOS.GERAL, // Acessando a Mente e o Espaço
-  NEP142: EIXOS.GERAL, // Tóp Esp Políticas Públicas e Dir Humanos
-  LEB599: EIXOS.GERAL,
+
+  // 6. Equivalências históricas — códigos da grade antiga (MAB/legados)
+  // atribuídos ao eixo da disciplina equivalente no PPC 2022.
+  MAB352: EIXOS.TEORIA, // Matemática Combinatória -> ICP144 Matemática Discreta
+  MAB115: EIXOS.TEORIA, // Álgebra Linear Algorítmica -> ICP115
+  MAB123: EIXOS.TEORIA, // Linguagens Formais -> ICP123
+  MAB368: EIXOS.TEORIA, // Algoritmos e Grafos -> ICP368
+  MAB116: EIXOS.ENGENHARIA, // Estrutura de Dados -> ICP116
+  MAB240: EIXOS.ENGENHARIA, // Computação II -> ICP239 POO
+  MAB353: EIXOS.ENGENHARIA, // Computadores e Programação -> ICP353
+  MAB489: EIXOS.ENGENHARIA, // Bancos de Dados -> ICP489
+  MAB230: EIXOS.DADOS, // Cálculo Numérico -> ICP238/ICP248
+  MAB515: EIXOS.DADOS, // Avaliação e Desempenho -> ICP350
+  MAB355: EIXOS.SISTEMAS, // Arquitetura de Computadores -> ICP246
+  MAB366: EIXOS.SISTEMAS, // Sistemas Operacionais -> ICP246
+  MAB117: EIXOS.SISTEMAS, // Computação/Programação Concorrente -> ICP361
+  ICP510: EIXOS.SISTEMAS, // Teleprocessamento e Redes -> ICP362
+  ICP232: EIXOS.DADOS, // Programação Linear -> ICP365
+  ICP236: EIXOS.TEORIA, // Lógica -> ICP370 Lógica e Computabilidade
+  ICP004: EIXOS.DADOS, // Aprendizado de Máquina -> ICP363
 };
 
+// Prefixos de unidades fora do rol do BCC (Física, Letras, outros centros)
+// caem no fallback e são classificados como Livre Escolha.
 const PREFIXOS_EIXOS = [
   [/^MA[ED]/, EIXOS.TEORIA],
-  [/^(NEP|FCF|IEE|LEB|NCG|CMT|FIM|FIT)/, EIXOS.GERAL],
   [/^(ICP|MAB)/, EIXOS.ENGENHARIA],
 ];
 

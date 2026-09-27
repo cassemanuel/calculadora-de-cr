@@ -595,6 +595,7 @@ tbody tr:hover {
   width: 100%;
   height: auto;
   display: block;
+  overflow: visible;
 }
 
 .chart-grid-line {
@@ -729,8 +730,9 @@ tbody tr:hover {
 
 .chart-legenda {
   display: flex;
-  gap: var(--spacing-lg);
-  margin-top: var(--spacing-sm);
+  justify-content: center;
+  gap: 1.5rem;
+  margin-top: 1rem;
   font-family: var(--font-body);
   font-size: 0.85rem;
   color: var(--text-secondary);
@@ -754,7 +756,9 @@ tbody tr:hover {
 }
 
 .chart-swatch-periodo {
-  background-color: var(--chart-periodo);
+  height: 0;
+  background: none;
+  border-top: 3px dashed var(--chart-periodo);
 }
 
 .metric-card .metric-value {
@@ -767,6 +771,9 @@ tbody tr:hover {
 
 /* ----- Eixos temáticos (accordion) ----- */
 .eixos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1.25rem;
   align-items: start;
 }
 
@@ -811,6 +818,30 @@ tbody tr:hover {
 
 .eixo-body.hidden {
   display: none;
+}
+
+.eixo-body table {
+  width: 100%;
+}
+
+.eixo-body th {
+  white-space: nowrap;
+}
+
+.eixo-body th:nth-child(1),
+.eixo-body td:nth-child(1) {
+  width: 80px;
+}
+
+.eixo-body td:nth-child(2) {
+  min-width: 140px;
+  word-break: break-word;
+}
+
+.eixo-body th:nth-child(n + 3),
+.eixo-body td:nth-child(n + 3) {
+  text-align: center;
+  white-space: nowrap;
 }
 
 /* ----- Inputs ----- */
@@ -1048,6 +1079,10 @@ table .btn {
 
   .card {
     padding: var(--spacing-md);
+  }
+
+  .eixos-grid {
+    grid-template-columns: 1fr;
   }
 
   .eixo-card {
