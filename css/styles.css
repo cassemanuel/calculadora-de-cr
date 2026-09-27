@@ -772,9 +772,15 @@ tbody tr:hover {
 /* ----- Eixos temáticos (accordion) ----- */
 .eixos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
   align-items: start;
+}
+
+@media (max-width: 900px) {
+  .eixos-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .eixo-card {
@@ -822,40 +828,41 @@ tbody tr:hover {
 
 .eixo-body table {
   width: 100%;
-  table-layout: fixed;
+  table-layout: auto;
   border-collapse: collapse;
 }
 
-.eixo-body th:nth-child(1),
+.eixo-body th {
+  white-space: nowrap;
+}
+
 .eixo-body td:nth-child(1) {
-  width: 75px;
+  white-space: nowrap;
   text-align: left;
 }
 
 .eixo-body th:nth-child(2),
 .eixo-body td:nth-child(2) {
-  width: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  width: 100%;
+  text-align: left;
 }
 
 .eixo-body th:nth-child(3),
 .eixo-body td:nth-child(3) {
-  width: 45px;
   text-align: center;
+  white-space: nowrap;
 }
 
 .eixo-body th:nth-child(4),
 .eixo-body td:nth-child(4) {
-  width: 50px;
   text-align: right;
+  white-space: nowrap;
 }
 
 .eixo-body th:nth-child(5),
 .eixo-body td:nth-child(5) {
-  width: 50px;
   text-align: center;
+  white-space: nowrap;
 }
 
 /* ----- Inputs ----- */
@@ -979,9 +986,17 @@ select:focus {
   accent-color: var(--cor-ic1);
 }
 
+.simulator {
+  margin-top: 2.5rem;
+}
+
 .simulator .card,
 .data-actions .card {
   margin-top: var(--spacing-md);
+}
+
+#analytics-content > .card:first-child {
+  margin-bottom: 2rem;
 }
 
 /* Inputs dentro de tabelas */
@@ -1093,10 +1108,6 @@ table .btn {
 
   .card {
     padding: var(--spacing-md);
-  }
-
-  .eixos-grid {
-    grid-template-columns: 1fr;
   }
 
   .eixo-card {

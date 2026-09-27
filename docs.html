@@ -101,6 +101,20 @@
     </section>
 
     <section class="card">
+      <h3>Boletim ou Histórico: qual enviar?</h3>
+      <p>
+        Prefira sempre o <strong>Boletim Não Oficial</strong>. O SIGA omite reprovações no
+        Histórico Escolar oficial: disciplinas com SF <em>RM</em>, <em>RF</em> ou <em>RFM</em>
+        simplesmente não aparecem no documento.
+      </p>
+      <p>
+        Como reprovações entram no CR com grau 0, o CR calculado a partir do histórico pode ficar
+        <strong>maior que o oficial</strong> se você tiver reprovações anteriores. Quando um
+        histórico é detectado, a ferramenta exibe um aviso destacando essa limitação.
+      </p>
+    </section>
+
+    <section class="card">
       <h3>Exemplo de validação</h3>
       <p>Resultado obtido ao processar um boletim real do SIGA:</p>
       <ul>
@@ -125,6 +139,20 @@
     </section>
 
     <section class="card">
+      <h3>Importar pendências do BOA</h3>
+      <p>
+        No Simulador de Período Atual, o botão <strong>Importar pendências do BOA</strong> lê o
+        <code>boa.pdf</code> (Boletim de Orientação Acadêmica do SIGA) e preenche a tabela
+        automaticamente com as disciplinas obrigatórias e optativas pendentes (ou em curso)
+        que possuem período recomendado definido.
+      </p>
+      <ul>
+        <li>Basta informar a nota prevista de cada disciplina importada para ver o impacto no CR.</li>
+        <li>Disciplinas já concluídas ou sem período recomendado não são importadas.</li>
+      </ul>
+    </section>
+
+    <section class="card">
       <h3>Meta reversa</h3>
       <p>
         A meta reversa responde: <em>“Qual média preciso tirar nas disciplinas restantes para atingir um CR alvo?”</em>
@@ -132,6 +160,29 @@
       <pre><code>média necessária = (CR alvo × CrR total − pontos acumulados) / CrR restante</code></pre>
       <p>
         Se a nota necessária for negativa, você já está acima do CR alvo. Se for maior que 10, o CR alvo é inatingível com os créditos restantes.
+      </p>
+    </section>
+
+    <section class="card">
+      <h3>Análise por eixos temáticos (PPC 2022)</h3>
+      <p>
+        A aba <strong>Análise e Evolução</strong> mostra a evolução do CR por período e calcula um
+        CR específico para cada eixo formativo oficial do PPC 2022 do BCC, ponderando apenas as
+        disciplinas daquele eixo:
+      </p>
+      <ul>
+        <li>Teoria da Computação e Matemática</li>
+        <li>Sistemas Computacionais e Comunicação</li>
+        <li>Engenharia de Software e Aplicações</li>
+        <li>Ciência de Dados e Computação Científica</li>
+        <li>Formação Humana, Social e Complementar</li>
+        <li>Livre Escolha (disciplinas cursadas fora do rol do BCC)</li>
+      </ul>
+      <p>
+        Reprovações entram normalmente no CR de cada eixo, e as equivalências históricas
+        <strong>MAB → ICP</strong> são respeitadas na categorização: uma disciplina da grade antiga
+        é atribuída ao eixo da sua equivalente no PPC 2022. Clique em um card de eixo para ver a
+        lista de disciplinas cursadas naquela área.
       </p>
     </section>
 
