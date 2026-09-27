@@ -19,6 +19,41 @@ SPA leve e 100% client-side para leitura do **boletim/histórico não oficial do
 - **Identidade Visual do IC/UFRJ com Temas Claro/Escuro**  
   Interface com tipografia `Montserrat` + `Open Sans`, ícones `Bootstrap Icons`, paleta institucional (`#344563`) e alternância nativa entre Light e Dark Mode, persistindo a escolha do usuário.
 
+## Regras de negócio e precisão do cálculo
+
+A calculadora segue as regras do SIGA/UFRJ para o Coeficiente de Rendimento (CR):
+
+```
+CR = Σ(Grau × CrR) / Σ(CrR)
+```
+
+Onde `Grau` é a nota final e `CrR` são os créditos requisitados da disciplina. Apenas disciplinas que **conferem grau** entram no numerador e no denominador.
+
+### Situações tratadas
+
+| Situação (SF) | Conferem grau? | Comportamento no CR |
+|---------------|----------------|----------------------|
+| **AP**        | Sim            | Entra com grau × CrR no numerador e CrR no denominador. |
+| **RM** / **RF** / **RFM** | Sim | Reprovações entram no cálculo com grau 0, reduzindo o CR. |
+| **NCG**       | Não            | Disciplina sem grau; ignora CrR e pontos. |
+| **NCC**       | Não            | Disciplina que não confere crédito; ignora CrR e pontos. |
+| **T**         | Não            | Transferência/equivalência; ignora CrR e pontos. |
+| **Cursando**  | Não            | Disciplinas em curso não entram no CR de histórico concluído. |
+| Trancamentos  | Não            | Períodos com trancamento são ignorados. |
+
+> **Detalhe importante:** alguns boletins exibem a disciplina com SF `AP` e, ao mesmo tempo, grau textual `T`, `NCG` ou `NCC` (ex: transferências aprovadas por equivalência). Nesses casos, a disciplina é excluída do divisor do CR, mesmo que a situação final seja `AP`.
+
+### Exemplo de validação contra o `boletim.pdf`
+
+- **Créditos acumulados exibidos no PDF:** `196,0`
+- **CrR efetivo com grau:** `190,0` (exclui `ICP136`=4,0 cr como transferência `T` e `ICPX06`=2,0 cr como `NCG`)
+- **Pontos acumulados:** `1336,1`
+- **CR calculado:** `1336,1 / 190,0 = 7,032` (o SIGA pode arredondar para `7,0` na interface)
+
+### Formatos numéricos
+
+A interface aceita tanto **vírgula** quanto **ponto** como separador decimal. Os resultados são exibidos no padrão brasileiro (vírgula como separador decimal).
+
 ## Como executar localmente
 
 Como a aplicação usa ES modules e o worker do `pdfjs-dist`, abra-a através de um servidor local (não funciona diretamente com `file://`).
