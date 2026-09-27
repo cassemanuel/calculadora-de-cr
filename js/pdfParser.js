@@ -22,6 +22,11 @@ const CAMPOS_FINAIS_REGEX = new RegExp(
 
 const MAX_PDF_PAGES = 25;
 
+// Parâmetros de layout do documento usados na reconstrução das linhas.
+const LAYOUT_CONFIG = {
+  TOLERANCIA_Y: 4, // variação vertical aceitável para itens da mesma linha
+};
+
 /**
  * Extrai texto de um arquivo PDF usando pdfjs-dist.
  * @param {ArrayBuffer | Uint8Array} pdfData
@@ -46,12 +51,16 @@ export async function extractTextFromPDF(pdfData, onProgress) {
   const lines = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
+    try {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
 
-    // Agrupa os itens por coordenada Y para reconstruir as linhas do PDF.
-    const linhasPagina = agruparItensPorLinha(textContent.items);
-    lines.push(...linhasPagina.map((l) => l.trim()).filter(Boolean));
+      // Agrupa os itens por coordenada Y para reconstruir as linhas do PDF.
+      const linhasPagina = agruparItensPorLinha(textContent.items);
+      lines.push(...linhasPagina.map((l) => l.trim()).filter(Boolean));
+    } catch (err) {
+      console.warn(`Falha ao extrair texto da página ${i}; página ignorada.`, err);
+    }
 
     if (onProgress) {
       onProgress(i / pdf.numPages);
@@ -61,8 +70,13 @@ export async function extractTextFromPDF(pdfData, onProgress) {
   return lines;
 }
 
+/**
+ * Agrupa itens de texto do pdf.js em linhas pela coordenada Y.
+ * @param {Array<object>} items
+ * @returns {string[]}
+ */
 function agruparItensPorLinha(items) {
-  const TOLERANCIA_Y = 4;
+  const { TOLERANCIA_Y } = LAYOUT_CONFIG;
   const grupos = [];
 
   for (const item of items) {
@@ -182,85 +196,96 @@ export function parseMetadata(lines) {
   };
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const nextLine = lines[i + 1] || '';
-
-    if (!metadata.tipoDocumento) {
-      if (/HIST[ÓO]RICO\s+N[ÃA]O\s+OFICIAL/i.test(line)) {
-        metadata.tipoDocumento = 'historico';
-      } else if (/BOLETIM\s+N[ÃA]O\s+OFICIAL/i.test(line)) {
-        metadata.tipoDocumento = 'boletim';
-      }
-    }
-
-    if (!metadata.nome) {
-      // Tenta capturar o nome logo depois de "Nome Civil".
-      let nomeMatch = line.match(/Nome\s*Civil\s*([A-ZÁ-ÚÀ-Ù\s]+?)(?=\s+\d|\s+Pai|\s+Mãe|\s+Naturalidade|$)/i);
-      if (nomeMatch) {
-        metadata.nome = nomeMatch[1].trim();
-        continue;
-      }
-      // Fallback: nome vem antes de "Nome Civil" (texto colado do SIGA).
-      nomeMatch = line.match(/([A-ZÁ-ÚÀ-Ù\s]+?)\s*Nome\s*Civil/i);
-      if (nomeMatch) {
-        metadata.nome = nomeMatch[1].trim();
-        continue;
-      }
-    }
-
-    if (!metadata.dre) {
-      // O DRE aparece logo acima da label "Registro" no boletim/histórico.
-      if (/^Registro$/i.test(nextLine)) {
-        const m = line.match(/\b(\d{9,10})\b/);
-        if (m) metadata.dre = m[1];
-        continue;
-      }
-
-      // Fallback: linha isolada com exatamente 9 ou 10 dígitos (DRE).
-      const m = line.match(/^\s*(\d{9,10})\s*$/);
-      if (m && !line.includes(' ')) {
-        metadata.dre = m[1];
-        continue;
-      }
-    }
-
-    if (!metadata.curso) {
-      const cursoMatch = line.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-Úá-ú\s]+?)(?=\s*Reconhecimento|\s*Portaria|\s*Unidade|\s*Turno|$)/i);
-      if (cursoMatch) {
-        metadata.curso = cursoMatch[1].trim().replace(/\s+Curso$/i, '');
-        continue;
-      }
-    }
-
-    if (!metadata.ingresso) {
-      const ingressoMatch = line.match(/em:\s*(\d{4}\/\d)/i);
-      if (ingressoMatch) {
-        metadata.ingresso = ingressoMatch[1];
-        continue;
-      }
-    }
-
-    if (!metadata.emissao) {
-      const emissaoMatch = line.match(/Brasileiro\s+Nato\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})/i);
-      if (emissaoMatch) {
-        metadata.emissao = emissaoMatch[1];
-        continue;
-      }
-      // Fallback genérico: data/hora isolada no formato do SIGA.
-      const fallbackEmissao = line.match(/\b(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})\b/);
-      if (fallbackEmissao && line.length < 80) {
-        metadata.emissao = fallbackEmissao[1];
-        continue;
-      }
-    }
-
-    if (!metadata.dre && /Nome\s*Civil/i.test(line)) {
-      const candidatos = line.match(/\b\d{9,10}\b/g);
-      if (candidatos) metadata.dre = candidatos[candidatos.length - 1];
+    try {
+      extrairMetadadosDaLinha(lines[i], lines[i + 1] || '', metadata);
+    } catch (err) {
+      console.warn('Linha de metadados ignorada por erro de parsing:', lines[i], err);
     }
   }
 
   return metadata;
+}
+
+/**
+ * Tenta extrair um campo de metadados de uma única linha.
+ * @param {string} line
+ * @param {string} nextLine
+ * @param {object} metadata Objeto de metadados em preenchimento (mutado).
+ */
+function extrairMetadadosDaLinha(line, nextLine, metadata) {
+  if (!metadata.tipoDocumento) {
+    if (/HIST[ÓO]RICO\s+N[ÃA]O\s+OFICIAL/i.test(line)) {
+      metadata.tipoDocumento = 'historico';
+    } else if (/BOLETIM\s+N[ÃA]O\s+OFICIAL/i.test(line)) {
+      metadata.tipoDocumento = 'boletim';
+    }
+  }
+
+  if (!metadata.nome) {
+    // Tenta capturar o nome logo depois de "Nome Civil".
+    let nomeMatch = line.match(/Nome\s*Civil\s*([A-ZÁ-ÚÀ-Ù\s]+?)(?=\s+\d|\s+Pai|\s+Mãe|\s+Naturalidade|$)/i);
+    if (nomeMatch) {
+      metadata.nome = nomeMatch[1].trim();
+      return;
+    }
+    // Fallback: nome vem antes de "Nome Civil" (texto colado do SIGA).
+    nomeMatch = line.match(/([A-ZÁ-ÚÀ-Ù\s]+?)\s*Nome\s*Civil/i);
+    if (nomeMatch) {
+      metadata.nome = nomeMatch[1].trim();
+      return;
+    }
+  }
+
+  if (!metadata.dre) {
+    // O DRE aparece logo acima da label "Registro" no boletim/histórico.
+    if (/^Registro$/i.test(nextLine)) {
+      const m = line.match(/\b(\d{9,10})\b/);
+      if (m) metadata.dre = m[1];
+      return;
+    }
+
+    // Fallback: linha isolada com exatamente 9 ou 10 dígitos (DRE).
+    const m = line.match(/^\s*(\d{9,10})\s*$/);
+    if (m && !line.includes(' ')) {
+      metadata.dre = m[1];
+      return;
+    }
+  }
+
+  if (!metadata.curso) {
+    const cursoMatch = line.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-Úá-ú\s]+?)(?=\s*Reconhecimento|\s*Portaria|\s*Unidade|\s*Turno|$)/i);
+    if (cursoMatch) {
+      metadata.curso = cursoMatch[1].trim().replace(/\s+Curso$/i, '');
+      return;
+    }
+  }
+
+  if (!metadata.ingresso) {
+    const ingressoMatch = line.match(/em:\s*(\d{4}\/\d)/i);
+    if (ingressoMatch) {
+      metadata.ingresso = ingressoMatch[1];
+      return;
+    }
+  }
+
+  if (!metadata.emissao) {
+    const emissaoMatch = line.match(/Brasileiro\s+Nato\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})/i);
+    if (emissaoMatch) {
+      metadata.emissao = emissaoMatch[1];
+      return;
+    }
+    // Fallback genérico: data/hora isolada no formato do SIGA.
+    const fallbackEmissao = line.match(/\b(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})\b/);
+    if (fallbackEmissao && line.length < 80) {
+      metadata.emissao = fallbackEmissao[1];
+      return;
+    }
+  }
+
+  if (!metadata.dre && /Nome\s*Civil/i.test(line)) {
+    const candidatos = line.match(/\b\d{9,10}\b/g);
+    if (candidatos) metadata.dre = candidatos[candidatos.length - 1];
+  }
 }
 
 /**
@@ -320,6 +345,12 @@ export function parseDisciplinaLine(line) {
   };
 }
 
+/**
+ * Converte um campo do boletim em número ou preserva o valor textual
+ * (NCG, NCC, *****).
+ * @param {string | number} value
+ * @returns {number | string | null}
+ */
 function parseCampoDisciplina(value) {
   if (!value) return null;
   const upper = String(value).toUpperCase();
@@ -329,14 +360,10 @@ function parseCampoDisciplina(value) {
 }
 
 /**
- * Verifica se uma linha representa o início de um novo período.
+ * Extrai o rótulo de período (ex: "2024/1") do início de uma linha.
  * @param {string} line
- * @returns {boolean}
+ * @returns {string|null}
  */
-export function isPeriodoLine(line) {
-  return PERIODO_INICIO_REGEX.test(line.trim());
-}
-
 function extractPeriodoDaLinha(line) {
   const match = line.trim().match(PERIODO_INICIO_REGEX);
   return match ? match[1].replace(/\s/g, '') : null;
@@ -369,74 +396,79 @@ export function parseHistorico(lines) {
   }
 
   for (const line of cleanLines) {
-    // Linhas de professores são ignoradas.
-    if (line.startsWith('Prof.')) continue;
+    try {
+      // Linhas de professores são ignoradas.
+      if (line.startsWith('Prof.')) continue;
 
-    // Detecta início de período no começo da linha.
-    const periodoDetectado = extractPeriodoDaLinha(line);
-    if (periodoDetectado) {
-      // Remove o período do início e tenta parsear o restante como disciplina.
-      const resto = line.trim().replace(PERIODO_INICIO_REGEX, '').trim();
+      // Detecta início de período no começo da linha.
+      const periodoDetectado = extractPeriodoDaLinha(line);
+      if (periodoDetectado) {
+        // Remove o período do início e tenta parsear o restante como disciplina.
+        const resto = line.trim().replace(PERIODO_INICIO_REGEX, '').trim();
 
-      if (currentPeriodo) {
-        if (currentPeriodo.disciplinas.length > 0) {
-          if (!currentPeriodo.periodo) {
-            // Período veio depois das disciplinas (primeiro bloco do boletim).
-            currentPeriodo.periodo = periodoDetectado;
-            periodos.push(currentPeriodo);
-            currentPeriodo = null;
+        if (currentPeriodo) {
+          if (currentPeriodo.disciplinas.length > 0) {
+            if (!currentPeriodo.periodo) {
+              // Período veio depois das disciplinas (primeiro bloco do boletim).
+              currentPeriodo.periodo = periodoDetectado;
+              periodos.push(currentPeriodo);
+              currentPeriodo = null;
+            } else {
+              // Período já estava definido: finaliza o atual e inicia novo.
+              periodos.push(currentPeriodo);
+              currentPeriodo = { periodo: periodoDetectado, disciplinas: [], totais: {} };
+            }
           } else {
-            // Período já estava definido: finaliza o atual e inicia novo.
-            periodos.push(currentPeriodo);
-            currentPeriodo = { periodo: periodoDetectado, disciplinas: [], totais: {} };
+            // Período veio antes das disciplinas: define o período atual.
+            currentPeriodo.periodo = periodoDetectado;
           }
         } else {
-          // Período veio antes das disciplinas: define o período atual.
-          currentPeriodo.periodo = periodoDetectado;
+          currentPeriodo = { periodo: periodoDetectado, disciplinas: [], totais: {} };
         }
-      } else {
-        currentPeriodo = { periodo: periodoDetectado, disciplinas: [], totais: {} };
+
+        // Se sobrou texto após o período, tenta processar como disciplina.
+        if (resto) {
+          const disciplina = parseDisciplinaLine(resto);
+          if (disciplina && currentPeriodo) {
+            currentPeriodo.disciplinas.push(disciplina);
+          }
+        }
+
+        emTotais = false;
+        continue;
       }
 
-      // Se sobrou texto após o período, tenta processar como disciplina.
-      if (resto) {
-        const disciplina = parseDisciplinaLine(resto);
-        if (disciplina && currentPeriodo) {
-          currentPeriodo.disciplinas.push(disciplina);
+      // Detecta início de bloco de totais.
+      if (/^Totais:/i.test(line) || line.toLowerCase() === 'acumulado') {
+        emTotais = true;
+        continue;
+      }
+
+      // Tenta parsear disciplina.
+      const disciplina = parseDisciplinaLine(line);
+      if (disciplina) {
+        if (!currentPeriodo) {
+          // Disciplina sem período explícito anterior – cria período genérico.
+          currentPeriodo = { periodo: null, disciplinas: [], totais: {} };
+        }
+        currentPeriodo.disciplinas.push(disciplina);
+        emTotais = false;
+        continue;
+      }
+
+      // Tenta extrair números de linhas de totais.
+      if (emTotais && currentPeriodo) {
+        const numeros = line.match(/\d+(?:\.\d+)?/g)?.map(Number);
+        if (numeros && numeros.length > 0) {
+          if (!currentPeriodo.totais.numerosBrutos) {
+            currentPeriodo.totais.numerosBrutos = [];
+          }
+          currentPeriodo.totais.numerosBrutos.push(...numeros);
         }
       }
-
-      emTotais = false;
-      continue;
-    }
-
-    // Detecta início de bloco de totais.
-    if (/^Totais:/i.test(line) || line.toLowerCase() === 'acumulado') {
-      emTotais = true;
-      continue;
-    }
-
-    // Tenta parsear disciplina.
-    const disciplina = parseDisciplinaLine(line);
-    if (disciplina) {
-      if (!currentPeriodo) {
-        // Disciplina sem período explícito anterior – cria período genérico.
-        currentPeriodo = { periodo: null, disciplinas: [], totais: {} };
-      }
-      currentPeriodo.disciplinas.push(disciplina);
-      emTotais = false;
-      continue;
-    }
-
-    // Tenta extrair números de linhas de totais.
-    if (emTotais && currentPeriodo) {
-      const numeros = line.match(/\d+(?:\.\d+)?/g)?.map(Number);
-      if (numeros && numeros.length > 0) {
-        if (!currentPeriodo.totais.numerosBrutos) {
-          currentPeriodo.totais.numerosBrutos = [];
-        }
-        currentPeriodo.totais.numerosBrutos.push(...numeros);
-      }
+    } catch (err) {
+      // Uma linha malformada não deve derrubar o parsing do documento inteiro.
+      console.warn('Linha ignorada por erro de parsing:', line, err);
     }
   }
 

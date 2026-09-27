@@ -36,13 +36,27 @@ const STATUS_MAP = [
   ['cursando', 'cursando'],
 ];
 
-// Y padrão das linhas do elenco recomendado (layout do SIGA), usado como
-// fallback quando a página não traz os rótulos da coluna esquerda.
-const PADRAO_Y_CRED_RECOM = 277;
-const PADRAO_Y_PER = 356;
-const TOLERANCIA_LINHA = 8;
 const MAX_PDF_PAGES = 25;
 
+// Parâmetros de layout da tabela do BOA (coordenadas do documento do SIGA).
+const LAYOUT_CONFIG = {
+  // Y padrão das linhas do elenco recomendado, usado como fallback quando a
+  // página não traz os rótulos da coluna esquerda.
+  PADRAO_Y_CRED_RECOM: 277,
+  PADRAO_Y_PER: 356,
+  TOLERANCIA_LINHA: 8, // variação de Y aceitável para itens da mesma linha
+  MAX_COLUNA_DELTA: 4, // variação de X aceitável para itens da mesma coluna
+  ZONA_APROVADAS_OFFSET_Y: 20, // distância acima da linha "Cred" das aprovadas
+  CREDITOS_PADRAO: 4.0, // CrR assumido quando a célula "Cred" não é legível
+};
+
+const { PADRAO_Y_CRED_RECOM, PADRAO_Y_PER, TOLERANCIA_LINHA } = LAYOUT_CONFIG;
+
+/**
+ * Normaliza texto para comparação: minúsculas e sem acentos.
+ * @param {string} str
+ * @returns {string}
+ */
 function normalize(str) {
   return String(str)
     .toLowerCase()
@@ -50,10 +64,20 @@ function normalize(str) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+/**
+ * Verifica se o texto é um código de disciplina no formato UFRJ.
+ * @param {string} str
+ * @returns {boolean}
+ */
 function isCodigoUFRJ(str) {
   return CODIGO_UFRJ_REGEX.test(str.trim());
 }
 
+/**
+ * Detecta status de pendência a partir do texto da ocorrência.
+ * @param {string} str
+ * @returns {string|null} Chave do status ou null se não for pendência.
+ */
 function detectarStatus(str) {
   const normalized = normalize(str).trim();
   for (const [keyword, status] of STATUS_MAP) {
@@ -62,6 +86,11 @@ function detectarStatus(str) {
   return null;
 }
 
+/**
+ * Verifica se o texto é um rótulo/cabeçalho da tabela (não é nome de disciplina).
+ * @param {string} str
+ * @returns {boolean}
+ */
 function isCabecalhoOuLabel(str) {
   const s = str.trim();
   return (
@@ -99,16 +128,20 @@ export async function extractBOAItems(pdfData) {
   const paginas = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const items = textContent.items
-      .filter((it) => it.str && it.str.trim())
-      .map((it) => ({
-        str: it.str.trim(),
-        x: it.transform?.[4] ?? 0,
-        y: it.transform?.[5] ?? 0,
-      }));
-    paginas.push(items);
+    try {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const items = textContent.items
+        .filter((it) => it.str && it.str.trim())
+        .map((it) => ({
+          str: it.str.trim(),
+          x: it.transform?.[4] ?? 0,
+          y: it.transform?.[5] ?? 0,
+        }));
+      paginas.push(items);
+    } catch (err) {
+      console.warn(`Falha ao extrair itens da página ${i}; página ignorada.`, err);
+    }
   }
 
   return paginas;
@@ -126,7 +159,7 @@ function agruparPorColuna(items) {
 
   for (const item of ordenados) {
     const ultima = colunas[colunas.length - 1];
-    if (ultima && item.x - ultima.xMax <= 4) {
+    if (ultima && item.x - ultima.xMax <= LAYOUT_CONFIG.MAX_COLUNA_DELTA) {
       ultima.items.push(item);
       ultima.xMax = Math.max(ultima.xMax, item.x);
     } else {
@@ -157,62 +190,67 @@ function parsePaginaBOA(items, faixas) {
 
   // Tudo acima da linha de cred do elenco recomendado pertence à zona de
   // atividades já aprovadas (ou ao cabeçalho de ocorrências).
-  const approvalMinY = credRecomY + 20;
+  const approvalMinY = credRecomY + LAYOUT_CONFIG.ZONA_APROVADAS_OFFSET_Y;
 
   const obrigatorias = [];
   const optativas = [];
   const vistos = new Set();
 
   for (const coluna of agruparPorColuna(items)) {
-    const ordenados = [...coluna].sort((a, b) => a.y - b.y);
+    try {
+      const ordenados = [...coluna].sort((a, b) => a.y - b.y);
 
-    // Código recomendado: item-código na linha mais baixa da coluna.
-    const codigos = ordenados.filter((it) => isCodigoUFRJ(it.str));
-    if (!codigos.length) continue;
-    const codigo = codigos[0].str.trim();
+      // Código recomendado: item-código na linha mais baixa da coluna.
+      const codigos = ordenados.filter((it) => isCodigoUFRJ(it.str));
+      if (!codigos.length) continue;
+      const codigo = codigos[0].str.trim();
 
-    // Status de pendência na coluna (linha de ocorrências).
-    const statusItem = ordenados.find((it) => detectarStatus(it.str));
-    if (!statusItem) continue;
-    const status = detectarStatus(statusItem.str);
+      // Status de pendência na coluna (linha de ocorrências).
+      const statusItem = ordenados.find((it) => detectarStatus(it.str));
+      if (!statusItem) continue;
+      const status = detectarStatus(statusItem.str);
 
-    // Aprovação/equivalência: qualquer código, grau ou conceito na zona
-    // superior da coluna indica que a disciplina já foi cumprida.
-    const aprovado = ordenados.some(
-      (it) =>
-        it.y > approvalMinY &&
-        it !== statusItem &&
-        !detectarStatus(it.str) &&
-        (isCodigoUFRJ(it.str) ||
-          DECIMAL_REGEX.test(it.str) ||
-          LETRAS_APROVACAO.has(it.str.toUpperCase()))
-    );
-    if (aprovado) continue;
+      // Aprovação/equivalência: qualquer código, grau ou conceito na zona
+      // superior da coluna indica que a disciplina já foi cumprida.
+      const aprovado = ordenados.some(
+        (it) =>
+          it.y > approvalMinY &&
+          it !== statusItem &&
+          !detectarStatus(it.str) &&
+          (isCodigoUFRJ(it.str) ||
+            DECIMAL_REGEX.test(it.str) ||
+            LETRAS_APROVACAO.has(it.str.toUpperCase()))
+      );
+      if (aprovado) continue;
 
-    // Período recomendado: inteiro na linha "Per" (define obrigatoriedade).
-    const perItem = ordenados.find(
-      (it) => INTEIRO_REGEX.test(it.str) && Math.abs(it.y - perY) <= TOLERANCIA_LINHA
-    );
-    const periodoRecomendado = perItem ? parseInt(perItem.str, 10) : null;
+      // Período recomendado: inteiro na linha "Per" (define obrigatoriedade).
+      const perItem = ordenados.find(
+        (it) => INTEIRO_REGEX.test(it.str) && Math.abs(it.y - perY) <= TOLERANCIA_LINHA
+      );
+      const periodoRecomendado = perItem ? parseInt(perItem.str, 10) : null;
 
-    // Créditos recomendados: decimal na linha "Cred" mais baixa.
-    const credItem = ordenados.find(
-      (it) => DECIMAL_REGEX.test(it.str) && Math.abs(it.y - credRecomY) <= TOLERANCIA_LINHA
-    );
-    const crR = credItem ? parseFloat(credItem.str) : 4.0;
+      // Créditos recomendados: decimal na linha "Cred" mais baixa.
+      const credItem = ordenados.find(
+        (it) => DECIMAL_REGEX.test(it.str) && Math.abs(it.y - credRecomY) <= TOLERANCIA_LINHA
+      );
+      const crR = credItem ? parseFloat(credItem.str) : LAYOUT_CONFIG.CREDITOS_PADRAO;
 
-    // Nome recomendado: texto da linha "Nome" mais baixa da coluna.
-    const nomeItem = ordenados.find((it) => !isCabecalhoOuLabel(it.str));
-    const nome = nomeItem ? nomeItem.str : codigo;
+      // Nome recomendado: texto da linha "Nome" mais baixa da coluna.
+      const nomeItem = ordenados.find((it) => !isCabecalhoOuLabel(it.str));
+      const nome = nomeItem ? nomeItem.str : codigo;
 
-    if (vistos.has(codigo)) continue;
-    vistos.add(codigo);
+      if (vistos.has(codigo)) continue;
+      vistos.add(codigo);
 
-    const disciplina = { codigo, nome, crR, periodoRecomendado, status };
-    if (periodoRecomendado != null) {
-      obrigatorias.push(disciplina);
-    } else {
-      optativas.push(disciplina);
+      const disciplina = { codigo, nome, crR, periodoRecomendado, status };
+      if (periodoRecomendado != null) {
+        obrigatorias.push(disciplina);
+      } else {
+        optativas.push(disciplina);
+      }
+    } catch (err) {
+      // Uma coluna malformada não deve derrubar o parsing da página inteira.
+      console.warn('Coluna ignorada por erro de parsing.', err);
     }
   }
 
@@ -235,7 +273,14 @@ export async function processarBOA(pdfData) {
   let faixas = { credRecomY: PADRAO_Y_CRED_RECOM, perY: PADRAO_Y_PER };
 
   for (const items of paginas) {
-    const resultado = parsePaginaBOA(items, faixas);
+    let resultado;
+    try {
+      resultado = parsePaginaBOA(items, faixas);
+    } catch (err) {
+      // Uma página malformada não deve derrubar o parsing do BOA inteiro.
+      console.warn('Página do BOA ignorada por erro de parsing.', err);
+      continue;
+    }
     faixas = { credRecomY: resultado.credRecomY, perY: resultado.perY };
 
     for (const d of resultado.obrigatorias) {

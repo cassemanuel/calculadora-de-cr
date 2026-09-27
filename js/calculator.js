@@ -24,10 +24,20 @@ export function situacaoConferGrau(situacao) {
   return SITUACOES_COM_GRAU.includes(String(situacao).toUpperCase());
 }
 
+/**
+ * Verifica se o grau é um número válido.
+ * @param {number | string | null | undefined} grau
+ * @returns {boolean}
+ */
 function isGrauNumericoValido(grau) {
   return typeof grau === 'number' && !isNaN(grau);
 }
 
+/**
+ * Verifica se o grau é textual e não confere grau (T, NCG, NCC, *****).
+ * @param {number | string | null | undefined} grau
+ * @returns {boolean}
+ */
 function isGrauTextualSemGrau(grau) {
   if (grau === null || grau === undefined) return true;
   return GRAUS_TEXTUAIS_SEM_GRAU.includes(String(grau).toUpperCase());
@@ -124,28 +134,6 @@ export function calcularCRAcumulado(historyData, disciplinasExtras = []) {
 }
 
 /**
- * Calcula CR de um período específico.
- * @param {object} periodo
- * @returns {{crRComGrau: number, pontosTotais: number, crCalculado: number}}
- */
-export function calcularCRPeriodo(periodo) {
-  if (!periodo || !Array.isArray(periodo.disciplinas)) {
-    return { crRComGrau: 0, pontosTotais: 0, crCalculado: 0 };
-  }
-  return calcularCRDisciplinas(periodo.disciplinas);
-}
-
-/**
- * Calcula o novo CR acumulado combinando histórico + disciplinas extras.
- * @param {object} historyData
- * @param {Array<object>} disciplinasExtras
- * @returns {{crRComGrau: number, pontosTotais: number, crCalculado: number}}
- */
-export function calcularNovoCRAcumulado(historyData, disciplinasExtras) {
-  return calcularCRAcumulado(historyData, disciplinasExtras);
-}
-
-/**
  * Calcula a média necessária nas disciplinas restantes para atingir um CR alvo.
  *
  * Fórmula:
@@ -196,6 +184,12 @@ export function calcularImpactoCR(crBase, crNovo) {
    importando runCalculatorTests de './calculator.js').
    ============================================================ */
 
+/**
+ * Assert numérico com tolerância de ponto flutuante.
+ * @param {number} actual
+ * @param {number} expected
+ * @param {string} message
+ */
 function assertEqual(actual, expected, message) {
   const ok = Math.abs(actual - expected) < 1e-6;
   if (!ok) {
@@ -203,6 +197,11 @@ function assertEqual(actual, expected, message) {
   }
 }
 
+/**
+ * Assert booleano simples.
+ * @param {boolean} condition
+ * @param {string} message
+ */
 function assertTrue(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -293,7 +292,7 @@ export function runCalculatorTests() {
 
   // 6. Novo CR acumulado com disciplinas extras
   const extras = [{ situacao: 'AP', grau: 9, crR: 6, pontos: 54 }];
-  const resNovo = calcularNovoCRAcumulado(historyData, extras);
+  const resNovo = calcularCRAcumulado(historyData, extras);
   assertEqual(resNovo.crRComGrau, 15, 'CrR base + extras');
   assertEqual(resNovo.pontosTotais, 96, 'Pontos base + extras');
   assertEqual(resNovo.crCalculado, 96 / 15, 'Novo CR acumulado');

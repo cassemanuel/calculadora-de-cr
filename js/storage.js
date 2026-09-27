@@ -3,17 +3,69 @@ const STORAGE_KEYS = {
   theme: 'cr-calculator-theme',
 };
 
+// Fallback em memória para quando o localStorage está indisponível
+// (navegação anônima restrita, quota excedida) — os dados duram apenas
+// a sessão, mas a interface continua funcionando sem travar.
+const memoriaFallback = new Map();
+let localStorageDisponivel = true;
+
+/**
+ * Lê uma chave do localStorage com fallback em memória.
+ * @param {string} key
+ * @returns {string|null}
+ */
+function storageGet(key) {
+  if (localStorageDisponivel) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      localStorageDisponivel = false;
+      console.warn('localStorage indisponível; usando fallback em memória.');
+    }
+  }
+  return memoriaFallback.get(key) ?? null;
+}
+
+/**
+ * Grava uma chave no localStorage com fallback em memória.
+ * @param {string} key
+ * @param {string} value
+ */
+function storageSet(key, value) {
+  if (localStorageDisponivel) {
+    try {
+      localStorage.setItem(key, value);
+      return;
+    } catch {
+      localStorageDisponivel = false;
+      console.warn('localStorage indisponível ou sem espaço; usando fallback em memória.');
+    }
+  }
+  memoriaFallback.set(key, value);
+}
+
+/**
+ * Remove uma chave do localStorage e do fallback em memória.
+ * @param {string} key
+ */
+function storageRemove(key) {
+  if (localStorageDisponivel) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      localStorageDisponivel = false;
+    }
+  }
+  memoriaFallback.delete(key);
+}
+
 /**
  * Carrega a preferência de tema salva. Padrão: 'light'.
  * @returns {'light' | 'dark'}
  */
 export function loadThemePreference() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.theme);
-    if (stored === 'dark' || stored === 'light') return stored;
-  } catch {
-    // localStorage pode estar indisponível em modo privado ou restrito.
-  }
+  const stored = storageGet(STORAGE_KEYS.theme);
+  if (stored === 'dark' || stored === 'light') return stored;
   return 'light';
 }
 
@@ -22,11 +74,7 @@ export function loadThemePreference() {
  * @param {'light' | 'dark'} theme
  */
 export function saveThemePreference(theme) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.theme, theme);
-  } catch {
-    // Ignora erros de localStorage.
-  }
+  storageSet(STORAGE_KEYS.theme, theme);
 }
 
 /**
@@ -35,7 +83,7 @@ export function saveThemePreference(theme) {
  */
 export function saveHistory(historyData) {
   try {
-    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(historyData));
+    storageSet(STORAGE_KEYS.history, JSON.stringify(historyData));
   } catch (e) {
     console.error('Erro ao salvar histórico:', e);
   }
@@ -45,11 +93,7 @@ export function saveHistory(historyData) {
  * Remove o histórico salvo do localStorage.
  */
 export function clearHistory() {
-  try {
-    localStorage.removeItem(STORAGE_KEYS.history);
-  } catch (e) {
-    console.error('Erro ao limpar histórico:', e);
-  }
+  storageRemove(STORAGE_KEYS.history);
 }
 
 /**
@@ -58,7 +102,7 @@ export function clearHistory() {
  */
 export function loadHistory() {
   try {
-    const stored = localStorage.getItem(STORAGE_KEYS.history);
+    const stored = storageGet(STORAGE_KEYS.history);
     if (!stored) return null;
 
     const data = JSON.parse(stored);

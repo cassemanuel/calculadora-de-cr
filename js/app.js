@@ -193,8 +193,6 @@ async function handlePDFUpload(file, { progress, progressBar, report }) {
     if (dropzoneHint) {
       dropzoneHint.textContent = 'Relatório processado. Envie outro PDF para recomeçar.';
     }
-
-    console.log('Histórico parseado:', data);
   } catch (err) {
     if (dropzoneLabel) {
       dropzoneLabel.textContent = 'Clique ou arraste o PDF aqui';
@@ -652,8 +650,6 @@ async function importBOAForSimulator(container) {
       const pendentes = todas.filter(
         (d) => statusPendentes.includes(d.status) && d.periodoRecomendado != null
       );
-
-      console.log('Disciplinas BOA parseadas:', pendentes);
 
       if (pendentes.length === 0) {
         alert('Nenhuma disciplina pendente encontrada no BOA.');
