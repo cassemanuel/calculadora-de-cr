@@ -251,14 +251,20 @@ function renderMetadataCard(metadata) {
 }
 
 function renderResumoCard(resumo) {
-  return el('div', { className: 'card' }, [
+  return el('div', { className: 'card cr-dashboard' }, [
     el('h3', {}, 'Resumo do CR'),
-    el('p', {}, [
-      el('strong', {}, 'Créditos com grau: '),
-      formatNumberBR(resumo.crRComGrau, 1),
+    el('div', { className: 'cr-value' }, formatNumberBR(resumo.crCalculado, 3)),
+    el('div', { className: 'cr-label' }, 'CR calculado'),
+    el('div', { className: 'cr-details' }, [
+      el('div', { className: 'cr-detail' }, [
+        el('span', { className: 'cr-detail-value' }, formatNumberBR(resumo.crRComGrau, 1)),
+        el('span', { className: 'cr-detail-label' }, 'Créditos com grau'),
+      ]),
+      el('div', { className: 'cr-detail' }, [
+        el('span', { className: 'cr-detail-value' }, formatNumberBR(resumo.pontosTotais, 1)),
+        el('span', { className: 'cr-detail-label' }, 'Pontos totais'),
+      ]),
     ]),
-    el('p', {}, [el('strong', {}, 'Pontos totais: '), formatNumberBR(resumo.pontosTotais, 1)]),
-    el('p', {}, [el('strong', {}, 'CR calculado: '), formatNumberBR(resumo.crCalculado, 3)]),
   ]);
 }
 

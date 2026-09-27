@@ -108,7 +108,7 @@ export function parseMetadata(lines) {
     const nextLine = lines[i + 1] || '';
 
     if (!metadata.nome) {
-      const nomeMatch = line.match(/^([A-ZÁ-ÚÀ-Ù\s]+?)\s*Nome\s*Civil$/i);
+      const nomeMatch = line.match(/^([A-ZÁ-ÚÀ-Ù\s]+?)\s*Nome\s*Civil/i);
       if (nomeMatch) {
         metadata.nome = nomeMatch[1].trim();
         continue;
@@ -124,7 +124,7 @@ export function parseMetadata(lines) {
     }
 
     if (!metadata.curso) {
-      const cursoMatch = line.match(/(\d+\s+-\s+.+)/);
+      const cursoMatch = line.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-Úá-ú\s]+?)(?=\s*Reconhecimento|\s*Portaria|\s*Unidade|\s*Turno|$)/i);
       if (cursoMatch) {
         metadata.curso = cursoMatch[1].trim();
         continue;
