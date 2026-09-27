@@ -242,14 +242,17 @@ function renderMetadataCard(metadata) {
     : null;
   const crAtual = state.historyData?.resumo?.crCalculado;
 
-  const cursoValue = metadata.curso
-    ? el('a', { href: 'https://siga.ufrj.br/sira/repositorio-curriculo/ListaCursos.html', target: '_blank' }, metadata.curso)
-    : null;
+  const cursoLabel = metadata.curso
+    ? el(
+        'a',
+        { href: 'https://siga.ufrj.br/sira/repositorio-curriculo/ListaCursos.html', target: '_blank', rel: 'noopener noreferrer' },
+        'Curso:'
+      )
+    : 'Curso:';
 
   const items = [
     ['Nome', metadata.nome],
     ['DRE', metadata.dre],
-    ['Curso', cursoValue],
     ['Ingresso', metadata.ingresso],
     ['Período atual', lastPeriodo],
     ['CR atual', crAtual != null ? formatNumberBR(crAtual, 3) : null],
@@ -257,6 +260,10 @@ function renderMetadataCard(metadata) {
   ]
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .map(([label, value]) => el('p', {}, [el('strong', {}, `${label}: `), value]));
+
+  if (metadata.curso) {
+    items.splice(2, 0, el('p', {}, [el('strong', {}, [cursoLabel, ' ']), metadata.curso]));
+  }
 
   return el('div', { className: 'card' }, [el('h3', {}, 'Dados do Aluno'), ...items]);
 }

@@ -42,13 +42,26 @@ export function saveHistory(historyData) {
 }
 
 /**
- * Carrega o histórico salvo, se existir.
+ * Carrega o histórico salvo, se existir e for válido.
  * @returns {object | null}
  */
 export function loadHistory() {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.history);
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+
+    const data = JSON.parse(stored);
+    if (!data || !Array.isArray(data.periodos) || data.periodos.length === 0) {
+      console.warn('Histórico salvo inválido ou vazio; ignorando cache.');
+      return null;
+    }
+
+    if (!data.resumo || !data.resumo.crRComGrau) {
+      console.warn('Resumo do histórico salvo zerado; ignorando cache.');
+      return null;
+    }
+
+    return data;
   } catch (e) {
     console.error('Erro ao carregar histórico:', e);
     return null;

@@ -5,7 +5,41 @@
  * permitindo sugerir disciplinas pendentes para o simulador.
  */
 
-const CODIGO_REGEX = /([A-Z]{2,}\d+[A-Z]?\d*)/;
+const CODIGO_REGEX = /([A-Z]{2,}[A-Z\d]*\d)/;
+
+const IGNORE_BOA_KEYWORDS = [
+  'PR1',
+  'BOLETIM',
+  'ORIENTAÇÃO',
+  'UFRJ',
+  'DRE',
+  'CASSIO',
+  'Aluno',
+  'Página',
+  'Emissão',
+  'Centro de Ciencias',
+  'Instituto de',
+  'Bacharelado',
+  'Integral',
+  'Unidade',
+  'Matrícula',
+  'Ativa',
+  'Sit. Matrícula',
+  'Turno',
+  'Formação',
+  'Atividades Acadêmicas Obrigatórias',
+  'Atividades Acadêmicas Optativas',
+  'Elenco Recomendado',
+  'Dados Atuais',
+  'já aprovadas',
+  'Ativ. Acad.',
+  'Falta Cumprir',
+  'Já Cumpridos',
+  'Totais a serem cumpridos',
+  'Extensão',
+];
+
+const PENDENTE_STATUS = ['cursando', 'inscrição vedada', 'inscrição facultada'];
 
 /**
  * Extrai texto de um arquivo PDF usando pdfjs-dist.
@@ -58,26 +92,36 @@ function agruparItensPorLinha(items) {
     );
 }
 
-function detectarStatus(line) {
-  const lower = line.toLowerCase();
+function isLinhaIgnorada(line) {
+  const upper = line.toUpperCase();
+  return IGNORE_BOA_KEYWORDS.some((kw) => upper.includes(kw.toUpperCase()));
+}
 
+function detectarStatusPendente(line) {
+  const lower = line.toLowerCase();
   if (lower.includes('inscrição vedada')) return 'inscricao_vedada';
   if (lower.includes('inscrição facultada')) return 'inscricao_facultada';
   if (lower.includes('cursando')) return 'cursando';
-
-  // Procura por uma nota de aprovação isolada (>= 5 e <= 10) ao lado de um código.
-  const notas = line.match(/\b(\d+(?:\.\d)?)\b/g)?.map(Number) ?? [];
-  const temNotaAprovacao = notas.some((n) => n >= 5 && n <= 10);
-  return temNotaAprovacao ? 'aprovada' : 'pendente';
+  return null;
 }
 
 /**
- * Tenta extrair uma disciplina de uma linha do BOA.
+ * Tenta extrair uma disciplina PENDENTE de uma linha do BOA.
+ * Retorna null se a linha representar uma disciplina já aprovada ou for cabeçalho/lixo.
  * @param {string} line
  * @returns {object|null}
  */
 export function parseBOALine(line) {
   if (!line || line.length < 8) return null;
+  if (isLinhaIgnorada(line)) return null;
+
+  const status = detectarStatusPendente(line);
+  if (!status) return null;
+
+  // Uma linha pendente não deve ter nota de aprovação (>= 5) ao lado de um código.
+  // Se tiver, provavelmente é uma disciplina já concluída em outra coluna.
+  const notas = line.match(/\b(\d+(?:\.\d)?)\b/g)?.map(Number) ?? [];
+  if (notas.some((n) => n >= 5 && n <= 10)) return null;
 
   const codigoMatch = line.match(CODIGO_REGEX);
   if (!codigoMatch) return null;
@@ -85,9 +129,10 @@ export function parseBOALine(line) {
   const codigo = codigoMatch[1];
   const idxCodigo = line.indexOf(codigo);
 
-  // Créditos: número decimal (ex: 4.0) colado logo antes do código.
+  // Créditos: número decimal (ex: 4.0) colado logo antes do primeiro código.
   const creditosMatch = line.slice(0, idxCodigo).match(/(\d+\.\d)\s*$/);
-  const crR = creditosMatch ? parseFloat(creditosMatch[1]) : 4;
+  if (!creditosMatch) return null;
+  const crR = parseFloat(creditosMatch[1]);
 
   // Nome: texto entre início e os créditos, removendo CH e período.
   const prefixo = line.slice(0, idxCodigo).replace(/\s*\d+\.\d\s*$/, '').trim();
@@ -102,7 +147,7 @@ export function parseBOALine(line) {
     nome: nome || codigo,
     crR,
     periodoRecomendado,
-    status: detectarStatus(line),
+    status,
   };
 }
 
