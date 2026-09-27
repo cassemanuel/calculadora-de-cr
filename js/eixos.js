@@ -182,7 +182,6 @@ const CICLO_BASICO = [
   { codigo: 'ICP136', nome: 'Sistemas de Informação', aceitos: ['ICP136'] },
   { codigo: 'ICP141', nome: 'Programação de Computadores II', aceitos: ['ICP141', 'ICP240', 'MAB120'] },
   { codigo: 'ICP142', nome: 'Organização de Dados I', aceitos: ['ICP142', 'MAB113'] },
-  { codigo: 'ICP143', nome: 'Projeto Prático', aceitos: ['ICP143'] },
   { codigo: 'ICP144', nome: 'Matemática Discreta', aceitos: ['ICP144', 'MAB352'] },
   { codigo: 'ICP145', nome: 'Metodologia Científica', aceitos: ['ICP145'] },
   { codigo: 'MAE111', nome: 'Cálculo Infinitesimal I', aceitos: ['MAE111'] },
