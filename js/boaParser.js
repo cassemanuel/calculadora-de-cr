@@ -33,11 +33,6 @@ function hasPendenteStatus(line) {
   return PENDENTE_TERMS.some((term) => normalized.includes(term));
 }
 
-function hasNotaAprovacao(line) {
-  const notas = line.match(/\b(\d+(?:\.\d)?)\b/g)?.map(Number) ?? [];
-  return notas.some((n) => n >= 5 && n <= 10);
-}
-
 function extrairNome(line, codigo, idxCodigo) {
   // Toma tudo antes do código, remove prefixos numéricos e créditos.
   let prefixo = line.slice(0, idxCodigo).trim();
@@ -81,38 +76,36 @@ export function parseBOALineRobust(line, index, allLines) {
 
   const resultados = [];
   const codigoMatches = [...line.matchAll(CODIGO_UFRJ_REGEX)];
+  if (codigoMatches.length === 0) return resultados;
 
-  for (const match of codigoMatches) {
-    const codigo = match[1];
-    const idxCodigo = match.index;
+  // Processa apenas o primeiro código da linha, que pertence ao currículo recomendado.
+  const match = codigoMatches[0];
+  const codigo = match[1];
+  const idxCodigo = match.index;
 
-    // Contexto pequeno: linha atual + vizinhas imediatas (status pode estar próximo).
-    const contexto = [allLines[index - 1] || '', line, allLines[index + 1] || ''].join(' ');
+  // Contexto pequeno: linha atual + vizinhas imediatas (status pode estar próximo).
+  const contexto = [allLines[index - 1] || '', line, allLines[index + 1] || ''].join(' ');
 
-    // Só considera pendente se houver termo de status na linha/contexto.
-    if (!hasPendenteStatus(contexto)) continue;
+  // Só considera pendente se houver termo de status na linha/contexto.
+  if (!hasPendenteStatus(contexto)) return resultados;
 
-    // Rejeita se a PRÓPRIA linha contiver nota de aprovação lançada (>= 5).
-    if (hasNotaAprovacao(line)) continue;
+  const nome = extrairNome(line, codigo, idxCodigo);
+  const crR = extrairCreditos(line, idxCodigo);
+  const periodoRecomendado = extrairPeriodoRecomendado(line);
 
-    const nome = extrairNome(line, codigo, idxCodigo);
-    const crR = extrairCreditos(line, idxCodigo);
-    const periodoRecomendado = extrairPeriodoRecomendado(line);
+  let status = 'pendente';
+  const normalizedContext = normalize(contexto);
+  if (normalizedContext.includes('inscricao vedada')) status = 'inscricao_vedada';
+  else if (normalizedContext.includes('inscricao facultada')) status = 'inscricao_facultada';
+  else if (normalizedContext.includes('cursando')) status = 'cursando';
 
-    let status = 'pendente';
-    const normalizedContext = normalize(contexto);
-    if (normalizedContext.includes('inscricao vedada')) status = 'inscricao_vedada';
-    else if (normalizedContext.includes('inscricao facultada')) status = 'inscricao_facultada';
-    else if (normalizedContext.includes('cursando')) status = 'cursando';
-
-    resultados.push({
-      codigo,
-      nome,
-      crR,
-      periodoRecomendado,
-      status,
-    });
-  }
+  resultados.push({
+    codigo,
+    nome,
+    crR,
+    periodoRecomendado,
+    status,
+  });
 
   return resultados;
 }

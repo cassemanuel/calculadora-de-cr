@@ -576,9 +576,8 @@ async function importBOAForSimulator(container) {
       const arrayBuffer = await file.arrayBuffer();
       const { obrigatorias, optativas } = await processarBOA(arrayBuffer);
       const todas = [...obrigatorias, ...optativas];
-      const pendentes = todas.filter(
-        (d) => d.status === 'pendente' || d.status === 'cursando' || d.status === 'inscricao_facultada'
-      );
+      const statusPendentes = ['pendente', 'cursando', 'inscricao_facultada', 'inscricao_vedada'];
+      const pendentes = todas.filter((d) => statusPendentes.includes(d.status));
 
       if (pendentes.length === 0) {
         alert('Nenhuma disciplina pendente encontrada no BOA.');
