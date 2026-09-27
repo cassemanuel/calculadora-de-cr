@@ -4,12 +4,15 @@ import {
   loadHistory,
   saveHistory,
   clearHistory,
+  clearPlanner,
+  savePlanner,
   exportJSON,
   importJSON,
 } from './storage.js';
 import { processarPDF } from './pdfParser.js';
 import { processarBOA } from './boaParser.js';
-import { calcularMetricasPorEixo } from './eixos.js';
+import { calcularMetricasPorEixo, verificarElegibilidadeEstagio } from './eixos.js';
+import { initPlanner, refreshPlanner, getPlannerData } from './planner.js';
 import {
   calcularCRAcumulado,
   calcularCRDisciplinas,
@@ -17,7 +20,14 @@ import {
   calcularImpactoCR,
   disciplinaConferGrau,
 } from './calculator.js';
-import { el, badgeClassForSituacao, clearElement, parseNumberBR, formatNumberBR } from './ui.js';
+import {
+  el,
+  badgeClassForSituacao,
+  clearElement,
+  parseNumberBR,
+  formatNumberBR,
+  validatePdfFile,
+} from './ui.js';
 
 // Estado global da aplicação.
 const state = {
@@ -32,7 +42,7 @@ function init() {
   initDropzone();
   initDataActions();
   initSimulator();
-  initQuickCalculator();
+  initPlanner(() => state.historyData);
   initChartResize();
 
   // Carrega histórico salvo, se existir.
@@ -121,6 +131,9 @@ function initTabs() {
       if (targetTab === 'analytics') {
         renderAnalytics();
       }
+      if (targetTab === 'planner') {
+        refreshPlanner();
+      }
     });
   });
 }
@@ -160,14 +173,6 @@ function initDropzone() {
     if (!file) return;
     handlePDFUpload(file, { progress, progressBar, report });
   });
-}
-
-const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10 MB
-
-function validatePdfFile(file) {
-  const isPdf = /\.pdf$/i.test(file?.name || '') || file?.type === 'application/pdf';
-  if (!isPdf) throw new Error('Envie um arquivo PDF válido (.pdf).');
-  if (file.size > MAX_PDF_SIZE) throw new Error('Arquivo muito grande (máx. 10 MB).');
 }
 
 async function handlePDFUpload(file, { progress, progressBar, report }) {
@@ -238,7 +243,7 @@ function initDataActions() {
       alert('Nenhum histórico para exportar. Importe um PDF primeiro.');
       return;
     }
-    exportJSON(state.historyData);
+    exportJSON({ ...state.historyData, planner: getPlannerData() });
   });
 
   importInput?.addEventListener('change', async () => {
@@ -246,10 +251,15 @@ function initDataActions() {
     if (!file) return;
     try {
       const data = await importJSON(file);
-      data.resumo = calcularCRAcumulado(data);
-      state.historyData = data;
-      saveHistory(data);
-      renderReport(report, data);
+      const { planner, ...historico } = data;
+      if (planner) {
+        savePlanner(planner);
+        refreshPlanner();
+      }
+      historico.resumo = calcularCRAcumulado(historico);
+      state.historyData = historico;
+      saveHistory(historico);
+      renderReport(report, historico);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -261,11 +271,13 @@ function initDataActions() {
   clearBtn?.addEventListener('click', () => {
     if (confirm('Deseja apagar todos os dados salvos deste navegador?')) {
       clearHistory();
+      clearPlanner();
       state.historyData = null;
       state.simulatorDisciplinas = [];
       clearElement(report);
       report?.classList.add('hidden');
       initSimulator();
+      refreshPlanner();
       alert('Dados salvos apagados.');
     }
   });
@@ -757,212 +769,6 @@ function updateMetaReversaResult() {
 }
 
 /* ============================================================
-   Cálculo Rápido
-   ============================================================ */
-
-function initQuickCalculator() {
-  const container = document.getElementById('quick-calculator-content');
-  if (!container) return;
-
-  const crAtualInput = el('input', { type: 'text', value: '' });
-  const crRAtualInput = el('input', { type: 'text', value: '' });
-  const pontosAtuaisInput = el('input', { type: 'text', value: '' });
-  const useCRRadio = el('input', { type: 'radio', name: 'base-mode', value: 'cr', checked: true });
-  const usePontosRadio = el('input', { type: 'radio', name: 'base-mode', value: 'pontos' });
-
-  const disciplinas = [];
-  const tableContainer = el('div', {}, []);
-
-  const renderResult = () => {
-    clearElement(tableContainer);
-
-    let crRBase = 0;
-    let pontosBase = 0;
-
-    if (usePontosRadio.checked) {
-      crRBase = parseNumberBR(crRAtualInput.value);
-      pontosBase = parseNumberBR(pontosAtuaisInput.value);
-    } else {
-      const cr = parseNumberBR(crAtualInput.value);
-      const crR = parseNumberBR(crRAtualInput.value);
-      crRBase = crR;
-      pontosBase = cr * crR;
-    }
-
-    const extras = calcularCRDisciplinas(disciplinas);
-    const crRTotal = crRBase + extras.crRComGrau;
-    const pontosTotal = pontosBase + extras.pontosTotais;
-    const crNovo = crRTotal ? pontosTotal / crRTotal : 0;
-    const crPeriodo = extras.crCalculado;
-    const impacto = calcularImpactoCR(crRBase ? pontosBase / crRBase : 0, crNovo);
-
-    tableContainer.appendChild(
-      el('div', { className: 'cards-grid' }, [
-        el('div', { className: 'card' }, [
-          el('h4', {}, 'CR Atual'),
-          el('p', {}, crRBase ? formatNumberBR(pontosBase / crRBase, 3) : '-'),
-        ]),
-        el('div', { className: 'card' }, [
-          el('h4', {}, 'CR do Período'),
-          el('p', {}, formatNumberBR(crPeriodo, 3)),
-        ]),
-        el('div', { className: 'card' }, [
-          el('h4', {}, 'Novo CR'),
-          el('p', {}, formatNumberBR(crNovo, 3)),
-        ]),
-        el('div', { className: 'card' }, [
-          el('h4', {}, 'Impacto'),
-          el(
-            'p',
-            {},
-            `${impacto.absoluto >= 0 ? '+' : ''}${formatNumberBR(impacto.absoluto, 3)} (${formatNumberBR(
-              impacto.percentual,
-              2
-            )}%)`
-          ),
-        ]),
-      ])
-    );
-  };
-
-  const updateQuickField = (index, field, value) => {
-    const disciplina = disciplinas[index];
-    if (!disciplina) return;
-    atualizarCampoDisciplina(disciplina, field, value);
-    renderResult();
-  };
-
-  const addDisciplina = () => {
-    disciplinas.push({ codigo: '', nome: '', crR: null, grau: null, pontos: 0, situacao: 'Cursando', conferGrau: false });
-    renderTable();
-  };
-
-  const renderTable = () => {
-    clearElement(tableContainer);
-    tableContainer.appendChild(renderQuickTable(disciplinas));
-    renderResult();
-  };
-
-  function renderQuickTable(items) {
-    const table = el('table', {}, [
-      el('caption', {}, 'Disciplinas do cálculo rápido'),
-      el('thead', {}, [
-        el('tr', {}, [
-          el('th', { scope: 'col' }, 'Código'),
-          el('th', { scope: 'col' }, 'Disciplina'),
-          el('th', { scope: 'col' }, 'CrR'),
-          el('th', { scope: 'col' }, 'Nota'),
-          el('td', {}),
-        ]),
-      ]),
-    ]);
-    const tbody = el('tbody', {});
-
-    if (items.length === 0) {
-      tbody.appendChild(el('tr', {}, [el('td', { colspan: 5, className: 'text-muted' }, 'Nenhuma disciplina adicionada.')]));
-    } else {
-      items.forEach((disciplina, index) => {
-        tbody.appendChild(
-          el('tr', {}, [
-            el('td', {}, [
-              el('input', {
-                type: 'text',
-                value: disciplina.codigo || '',
-                placeholder: 'Código',
-                oninput: (e) => updateQuickField(index, 'codigo', e.target.value),
-              }),
-            ]),
-            el('td', {}, [
-              el('input', {
-                type: 'text',
-                value: disciplina.nome || '',
-                placeholder: 'Nome da disciplina',
-                oninput: (e) => updateQuickField(index, 'nome', e.target.value),
-              }),
-            ]),
-            el('td', {}, [
-              el('input', {
-                type: 'text',
-                value: disciplina.crR || '',
-                placeholder: 'CrR',
-                oninput: (e) => updateQuickField(index, 'crR', e.target.value),
-              }),
-            ]),
-            el('td', {}, [
-              el('input', {
-                type: 'text',
-                value: disciplina.grau || '',
-                placeholder: 'Nota',
-                oninput: (e) => updateQuickField(index, 'grau', e.target.value),
-              }),
-            ]),
-            el('td', {}, [
-              el(
-                'button',
-                {
-                  type: 'button',
-                  className: 'btn btn-icon btn-danger',
-                  'aria-label': `Remover ${disciplina.codigo || `disciplina ${index + 1}`}`,
-                  title: 'Remover disciplina',
-                  onclick: () => removeDisciplina(index),
-                },
-                [el('i', { className: 'bi bi-trash', 'aria-hidden': 'true' })]
-              ),
-            ]),
-          ])
-        );
-      });
-    }
-
-    table.appendChild(tbody);
-    return table;
-  }
-
-  const removeDisciplina = (index) => {
-    disciplinas.splice(index, 1);
-    renderTable();
-  };
-
-  const modeChange = () => {
-    crAtualInput.disabled = usePontosRadio.checked;
-    pontosAtuaisInput.disabled = !usePontosRadio.checked;
-    renderResult();
-  };
-
-  useCRRadio.addEventListener('change', modeChange);
-  usePontosRadio.addEventListener('change', modeChange);
-  crAtualInput.addEventListener('input', renderResult);
-  crRAtualInput.addEventListener('input', renderResult);
-  pontosAtuaisInput.addEventListener('input', renderResult);
-
-  const baseForm = el('div', { className: 'card' }, [
-    el('h4', {}, 'Base Atual'),
-    el('div', { className: 'form-row' }, [
-      el('label', {}, [useCRRadio, ' CR atual + Créditos']),
-      el('label', {}, [usePontosRadio, ' Pontos + Créditos']),
-    ]),
-    el('div', { className: 'form-row' }, [
-      el('label', {}, ['CR atual: ', crAtualInput]),
-      el('label', {}, ['Créditos: ', crRAtualInput]),
-      el('label', {}, ['Pontos: ', pontosAtuaisInput]),
-    ]),
-  ]);
-
-  const actions = el('div', { className: 'actions-row' }, [
-    el('button', { className: 'btn btn-primary', type: 'button', onclick: addDisciplina }, [
-      el('i', { className: 'bi bi-plus-lg' }),
-      ' Adicionar disciplina',
-    ]),
-  ]);
-
-  modeChange();
-  container.appendChild(baseForm);
-  container.appendChild(actions);
-  container.appendChild(tableContainer);
-  renderTable();
-}
-
-/* ============================================================
    Análise e Evolução
    ============================================================ */
 
@@ -1052,6 +858,7 @@ function renderAnalytics() {
   const pontos = calcularPontosGrafico(periodos);
 
   container.appendChild(renderChartCard(pontos));
+  container.appendChild(renderEstagioCard(data));
   container.appendChild(renderMetricasHistoricas(periodos, data.resumo, pontos));
   container.appendChild(renderEixosCard(data));
 }
@@ -1236,6 +1043,36 @@ function buildChartTooltip(pontos, index) {
   }
 
   return el('div', {}, children);
+}
+
+/**
+ * Card de diagnóstico de elegibilidade para estágio não obrigatório,
+ * conforme o Art. 4º do Anexo C do PPC 2022 (ciclo básico, CR mínimo e
+ * tempo máximo de integralização).
+ * @param {object} data Dados do histórico.
+ * @returns {HTMLElement}
+ */
+function renderEstagioCard(data) {
+  const { apto, criterios } = verificarElegibilidadeEstagio(data);
+
+  return el('div', { className: `card estagio-card ${apto ? 'estagio-apto' : 'estagio-pendente'}` }, [
+    el('div', { className: 'estagio-header' }, [
+      el('h4', {}, 'Elegibilidade para Estágio'),
+      el('span', { className: `badge ${apto ? 'badge-ap' : 'badge-cursando'}` },
+        apto ? 'Apto para Estágio Não Obrigatório' : 'Pendente para Estágio'),
+    ]),
+    el('ul', { className: 'estagio-criterios' },
+      criterios.map((c) =>
+        el('li', { className: c.ok ? 'criterio-ok' : 'criterio-falta' }, [
+          el('i', {
+            className: `bi ${c.ok ? 'bi-check-circle-fill' : 'bi-exclamation-circle'}`,
+            'aria-hidden': 'true',
+          }),
+          el('span', {}, ` ${c.rotulo} — ${c.detalhe}`),
+        ])
+      )
+    ),
+  ]);
 }
 
 function renderMetricasHistoricas(periodos, resumo, pontos) {

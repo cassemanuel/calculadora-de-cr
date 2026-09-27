@@ -2,6 +2,20 @@
  * Helpers e renderização de componentes da interface.
  */
 
+const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10 MB
+
+/**
+ * Valida um arquivo de upload de PDF (extensão/MIME e tamanho máximo).
+ * Lança Error com mensagem amigável quando inválido.
+ * @param {File} file
+ * @returns {void}
+ */
+export function validatePdfFile(file) {
+  const isPdf = /\.pdf$/i.test(file?.name || '') || file?.type === 'application/pdf';
+  if (!isPdf) throw new Error('Envie um arquivo PDF válido (.pdf).');
+  if (file.size > MAX_PDF_SIZE) throw new Error('Arquivo muito grande (máx. 10 MB).');
+}
+
 /**
  * Sanitiza uma URL permitindo apenas esquemas seguros (http/https).
  * URLs com outros esquemas (javascript:, data:, etc.) são bloqueadas.

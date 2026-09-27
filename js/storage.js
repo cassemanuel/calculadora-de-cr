@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   history: 'cr-calculator-history',
   theme: 'cr-calculator-theme',
+  planner: 'cr-calculator-planner',
 };
 
 // Fallback em memória para quando o localStorage está indisponível
@@ -121,6 +122,46 @@ export function loadHistory() {
     console.error('Erro ao carregar histórico:', e);
     return null;
   }
+}
+
+/**
+ * Salva o planejamento de semestres futuros.
+ * @param {{banco: Array<object>, semestres: Array<object>}} plannerData
+ */
+export function savePlanner(plannerData) {
+  try {
+    storageSet(STORAGE_KEYS.planner, JSON.stringify(plannerData));
+  } catch (e) {
+    console.error('Erro ao salvar planejamento:', e);
+  }
+}
+
+/**
+ * Carrega o planejamento salvo, se existir e for válido.
+ * @returns {{banco: Array<object>, semestres: Array<object>} | null}
+ */
+export function loadPlanner() {
+  try {
+    const stored = storageGet(STORAGE_KEYS.planner);
+    if (!stored) return null;
+
+    const data = JSON.parse(stored);
+    if (!data || !Array.isArray(data.banco) || !Array.isArray(data.semestres)) {
+      console.warn('Planejamento salvo inválido; ignorando cache.');
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.error('Erro ao carregar planejamento:', e);
+    return null;
+  }
+}
+
+/**
+ * Remove o planejamento salvo.
+ */
+export function clearPlanner() {
+  storageRemove(STORAGE_KEYS.planner);
 }
 
 /**

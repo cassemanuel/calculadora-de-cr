@@ -161,3 +161,97 @@ export function calcularMetricasPorEixo(historyData) {
       return b.creditosTotais - a.creditosTotais;
     });
 }
+
+/* ============================================================
+   Elegibilidade para Estágio Não Obrigatório (PPC 2022, Art. 4º
+   do Anexo C — Programa de Estágio)
+   ============================================================ */
+
+const CR_MINIMO_ESTAGIO = 6.0;
+const MAX_PERIODOS_INTEGRALIZACAO = 14;
+
+// Disciplinas obrigatórias do ciclo básico (1º ao 4º período do PPC 2022).
+// Cada item aceita o código vigente ou qualquer equivalente histórico (MAB),
+// conforme a tabela de correspondências curriculares.
+const CICLO_BASICO = [
+  { codigo: 'ICP131', nome: 'Programação de Computadores I', aceitos: ['ICP131', 'MAB120'] },
+  { codigo: 'ICP132', nome: 'Processos de Software', aceitos: ['ICP132', 'MAB112'] },
+  { codigo: 'ICP133', nome: 'Fund. de Sist. da Computação', aceitos: ['ICP133', 'MAB111', 'MAB245'] },
+  { codigo: 'ICP134', nome: 'Números Inteiros e Criptografia', aceitos: ['ICP134', 'MAB624'] },
+  { codigo: 'MAE111', nome: 'Cálculo Infinitesimal I', aceitos: ['MAE111'] },
+  { codigo: 'ICP141', nome: 'Programação de Computadores II', aceitos: ['ICP141', 'ICP240', 'MAB120'] },
+  { codigo: 'ICP142', nome: 'Organização de Dados I', aceitos: ['ICP142', 'MAB113'] },
+  { codigo: 'ICP143', nome: 'Projeto Prático', aceitos: ['ICP143'] },
+  { codigo: 'ICP144', nome: 'Matemática Discreta', aceitos: ['ICP144', 'MAB352'] },
+  { codigo: 'ICP115', nome: 'Álgebra Linear Algorítmica', aceitos: ['ICP115', 'MAB115'] },
+  { codigo: 'ICP116', nome: 'Estrutura dos Dados', aceitos: ['ICP116', 'MAB116'] },
+  { codigo: 'ICP239', nome: 'POO - Programação Orientada a Objeto', aceitos: ['ICP239', 'MAB240'] },
+  { codigo: 'ICP238', nome: 'Introdução à Computação Numérica', aceitos: ['ICP238', 'MAB230'] },
+  { codigo: 'MAE992', nome: 'Cálculo Integral e Diferencial II', aceitos: ['MAE992'] },
+  { codigo: 'ICP246', nome: 'Arquitetura de Computadores e SO', aceitos: ['ICP246', 'MAB355', 'MAB366'] },
+  { codigo: 'ICP489', nome: 'Banco de Dados I', aceitos: ['ICP489', 'MAB489'] },
+  { codigo: 'MAD243', nome: 'Estatística e Probabilidade', aceitos: ['MAD243'] },
+  { codigo: 'ICP248', nome: 'Computação Científica e Análise de Dados', aceitos: ['ICP248', 'MAB230'] },
+  { codigo: 'FIW125', nome: 'Mecânica, Oscilações e Ondas', aceitos: ['FIW125', 'FIT111', 'FIT121', 'FIT112'] },
+  { codigo: 'FIW230', nome: 'Eletromagnetismo e Ótica', aceitos: ['FIW230', 'FIM230'] },
+];
+
+/**
+ * Verifica se a disciplina do histórico conta como concluída para fins de
+ * integralização (aprovada com grau ou cursada via equivalência/transferência).
+ * @param {object} disciplina
+ * @returns {boolean}
+ */
+function disciplinaConcluida(disciplina) {
+  const situacao = String(disciplina?.situacao || '').toUpperCase();
+  const grau = String(disciplina?.grau ?? '').toUpperCase();
+  return situacao === 'AP' || situacao === 'T' || grau === 'T';
+}
+
+/**
+ * Avalia a elegibilidade do aluno para estágio não obrigatório conforme o
+ * PPC 2022: ciclo básico concluído, CR acumulado mínimo de 6,000 e tempo de
+ * curso dentro do máximo de integralização (14 períodos).
+ * @param {object} historyData
+ * @returns {{apto: boolean, criterios: Array<{rotulo: string, ok: boolean, detalhe: string}>}}
+ */
+export function verificarElegibilidadeEstagio(historyData) {
+  const periodos = historyData?.periodos || [];
+  const disciplinas = periodos.flatMap((p) => p.disciplinas || []);
+  const codigosConcluidos = new Set(
+    disciplinas
+      .filter(disciplinaConcluida)
+      .map((d) => String(d.codigo || '').trim().toUpperCase())
+  );
+
+  const faltantes = CICLO_BASICO.filter(
+    (req) => !req.aceitos.some((cod) => codigosConcluidos.has(cod))
+  );
+
+  const crAcumulado = historyData?.resumo?.crCalculado ?? 0;
+  const periodosCursados = new Set(
+    periodos.map((p) => String(p.periodo || '').trim()).filter(Boolean)
+  ).size;
+
+  const criterios = [
+    {
+      rotulo: 'Ciclo básico concluído (1º–4º período)',
+      ok: faltantes.length === 0,
+      detalhe: faltantes.length
+        ? `Faltam disciplinas do ciclo básico: ${faltantes.map((f) => f.codigo).join(', ')}`
+        : 'Todas as obrigatórias do ciclo básico foram concluídas.',
+    },
+    {
+      rotulo: `CR acumulado mínimo de ${CR_MINIMO_ESTAGIO.toFixed(3)}`,
+      ok: crAcumulado >= CR_MINIMO_ESTAGIO,
+      detalhe: `CR atual ${crAcumulado.toFixed(3).replace('.', ',')} (mínimo ${CR_MINIMO_ESTAGIO.toFixed(3).replace('.', ',')})`,
+    },
+    {
+      rotulo: `Tempo de curso dentro de ${MAX_PERIODOS_INTEGRALIZACAO} períodos`,
+      ok: periodosCursados <= MAX_PERIODOS_INTEGRALIZACAO,
+      detalhe: `${periodosCursados} períodos cursados (máx. ${MAX_PERIODOS_INTEGRALIZACAO})`,
+    },
+  ];
+
+  return { apto: criterios.every((c) => c.ok), criterios };
+}
