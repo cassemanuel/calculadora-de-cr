@@ -781,15 +781,16 @@ tbody tr:hover {
 
 /* ----- Eixos temáticos (accordion) ----- */
 .eixos-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
   gap: 1.5rem;
   align-items: start;
+  width: 100%;
 }
 
 @media (max-width: 900px) {
   .eixos-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
 }
 
@@ -829,7 +830,14 @@ tbody tr:hover {
 }
 
 .eixo-body {
-  padding: 0 var(--spacing-md) var(--spacing-md);
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 var(--spacing-sm) var(--spacing-sm);
+}
+
+.eixo-body .table-container {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .eixo-body.hidden {
