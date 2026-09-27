@@ -609,20 +609,30 @@ tbody tr:hover {
   font-size: 11px;
 }
 
+:root {
+  --chart-acum: #344563;
+  --chart-periodo: #f59e0b;
+}
+
+[data-theme="dark"] {
+  --chart-acum: #60a5fa;
+  --chart-periodo: #fbbf24;
+}
+
 .chart-line {
   fill: none;
-  stroke-width: 2.5;
+  stroke-width: 3;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 
 .chart-line-acumulado {
-  stroke: var(--cor-ic1);
+  stroke: var(--chart-acum);
 }
 
 .chart-line-periodo {
-  stroke: var(--status-ciano);
-  stroke-dasharray: 6 4;
+  stroke: var(--chart-periodo);
+  stroke-dasharray: 5 5;
 }
 
 .chart-dot {
@@ -635,18 +645,11 @@ tbody tr:hover {
 }
 
 .chart-dot-acumulado {
-  fill: var(--cor-ic1);
+  fill: var(--chart-acum);
 }
 
 .chart-dot-periodo {
-  fill: var(--status-ciano);
-}
-
-[data-theme="dark"] .chart-line-acumulado,
-[data-theme="dark"] .chart-dot-acumulado,
-[data-theme="dark"] .chart-swatch-acumulado {
-  stroke: var(--cor-ic1-light);
-  fill: var(--cor-ic1-light);
+  fill: var(--chart-periodo);
 }
 
 .chart-legenda {
@@ -672,11 +675,11 @@ tbody tr:hover {
 }
 
 .chart-swatch-acumulado {
-  background-color: var(--cor-ic1);
+  background-color: var(--chart-acum);
 }
 
 .chart-swatch-periodo {
-  background-color: var(--status-ciano);
+  background-color: var(--chart-periodo);
 }
 
 .metric-card .metric-value {

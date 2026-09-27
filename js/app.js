@@ -987,8 +987,8 @@ function renderAnalytics() {
 
 function renderChartCard(pontos) {
   const largura = 720;
-  const altura = 300;
-  const margem = { topo: 20, direita: 20, base: 40, esquerda: 45 };
+  const altura = 320;
+  const margem = { topo: 20, direita: 20, base: 62, esquerda: 45 };
   const w = largura - margem.esquerda - margem.direita;
   const h = altura - margem.topo - margem.base;
 
@@ -1020,13 +1020,14 @@ function renderChartCard(pontos) {
     }, tick));
   }
 
-  // Rótulos do eixo X.
-  const rotacionar = pontos.length > 8;
+  // Rótulos do eixo X (rotacionados para não encavalarem).
   pontos.forEach((p, i) => {
-    const attrs = rotacionar
-      ? { x: x(i), y: altura - 8, 'text-anchor': 'end', transform: `rotate(-30 ${x(i)} ${altura - 8})`, class: 'chart-label' }
-      : { x: x(i), y: altura - 12, 'text-anchor': 'middle', class: 'chart-label' };
-    svg.appendChild(svgEl('text', attrs, p.periodo));
+    svg.appendChild(svgEl('text', {
+      x: x(i), y: altura - 10,
+      'text-anchor': 'end',
+      transform: `rotate(-35 ${x(i)} ${altura - 10})`,
+      class: 'chart-label',
+    }, p.periodo));
   });
 
   const toPoints = (key) =>
@@ -1035,18 +1036,20 @@ function renderChartCard(pontos) {
   // Linha do CR do período (tracejada).
   svg.appendChild(svgEl('polyline', {
     points: toPoints('crPeriodo'),
+    fill: 'none',
     class: 'chart-line chart-line-periodo',
   }));
   // Linha do CR acumulado (contínua).
   svg.appendChild(svgEl('polyline', {
     points: toPoints('crAcumulado'),
+    fill: 'none',
     class: 'chart-line chart-line-acumulado',
   }));
 
   // Pontos interativos com tooltip.
   pontos.forEach((p, i) => {
     svg.appendChild(svgEl('circle', {
-      cx: x(i), cy: y(p.crAcumulado), r: 5, class: 'chart-dot chart-dot-acumulado',
+      cx: x(i), cy: y(p.crAcumulado), r: 4, class: 'chart-dot chart-dot-acumulado',
     }, svgEl('title', {}, `${p.periodo} — CR acumulado: ${formatNumberBR(p.crAcumulado, 3)}`)));
     svg.appendChild(svgEl('circle', {
       cx: x(i), cy: y(p.crPeriodo), r: 4, class: 'chart-dot chart-dot-periodo',
