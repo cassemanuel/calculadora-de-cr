@@ -525,6 +525,16 @@ table {
   font-size: 0.95rem;
 }
 
+caption {
+  caption-side: top;
+  text-align: left;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 thead {
   background-color: var(--bg-secondary);
 }

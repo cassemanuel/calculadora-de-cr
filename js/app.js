@@ -33,6 +33,7 @@ function init() {
   initDataActions();
   initSimulator();
   initQuickCalculator();
+  initChartResize();
 
   // Carrega histórico salvo, se existir.
   const saved = loadHistory();
@@ -77,14 +78,22 @@ function applyTheme(theme) {
       icon.classList.remove('bi-sun-fill');
       icon.classList.add('bi-moon-stars-fill');
     }
-    if (toggleBtn) toggleBtn.setAttribute('title', 'Mudar para tema claro');
+    if (toggleBtn) {
+      toggleBtn.setAttribute('title', 'Mudar para tema claro');
+      toggleBtn.setAttribute('aria-label', 'Mudar para tema claro');
+      toggleBtn.setAttribute('aria-pressed', 'true');
+    }
   } else {
     html.removeAttribute('data-theme');
     if (icon) {
       icon.classList.remove('bi-moon-stars-fill');
       icon.classList.add('bi-sun-fill');
     }
-    if (toggleBtn) toggleBtn.setAttribute('title', 'Mudar para tema escuro');
+    if (toggleBtn) {
+      toggleBtn.setAttribute('title', 'Mudar para tema escuro');
+      toggleBtn.setAttribute('aria-label', 'Mudar para tema escuro');
+      toggleBtn.setAttribute('aria-pressed', 'false');
+    }
   }
 }
 
@@ -381,15 +390,16 @@ function renderPeriodo(periodo, crAcumuladoAteAqui) {
   ]);
 
   const table = el('table', {}, [
+    el('caption', {}, `Disciplinas cursadas no período ${periodo.periodo || 'não identificado'}`),
     el('thead', {}, [
       el('tr', {}, [
-        el('th', {}, 'Código'),
-        el('th', {}, 'Disciplina'),
-        el('th', {}, 'CH'),
-        el('th', {}, 'CrR'),
-        el('th', {}, 'Grau'),
-        el('th', {}, 'Pontos'),
-        el('th', {}, 'SF'),
+        el('th', { scope: 'col' }, 'Código'),
+        el('th', { scope: 'col' }, 'Disciplina'),
+        el('th', { scope: 'col' }, 'CH'),
+        el('th', { scope: 'col' }, 'CrR'),
+        el('th', { scope: 'col' }, 'Grau'),
+        el('th', { scope: 'col' }, 'Pontos'),
+        el('th', { scope: 'col' }, 'SF'),
       ]),
     ]),
     el(
@@ -413,8 +423,10 @@ function renderPeriodo(periodo, crAcumuladoAteAqui) {
 
   const body = el('div', { className: 'periodo-body hidden' }, [table]);
 
+  header.setAttribute('aria-expanded', 'false');
   header.addEventListener('click', () => {
-    body.classList.toggle('hidden');
+    const aberto = !body.classList.toggle('hidden');
+    header.setAttribute('aria-expanded', String(aberto));
   });
 
   return el('div', { className: 'card periodo-card' }, [header, body]);
@@ -466,13 +478,14 @@ function renderSimulatorUI(container) {
   ]);
 
   const table = el('table', {}, [
+    el('caption', {}, 'Disciplinas do período em simulação'),
     el('thead', {}, [
       el('tr', {}, [
-        el('th', {}, 'Código'),
-        el('th', {}, 'Nome'),
-        el('th', {}, 'CrR'),
-        el('th', {}, 'Nota prevista'),
-        el('th', {}, 'Ações'),
+        el('th', { scope: 'col' }, 'Código'),
+        el('th', { scope: 'col' }, 'Nome'),
+        el('th', { scope: 'col' }, 'CrR'),
+        el('th', { scope: 'col' }, 'Nota prevista'),
+        el('th', { scope: 'col' }, 'Ações'),
       ]),
     ]),
     el('tbody', {}),
@@ -586,8 +599,14 @@ function renderDisciplinaRow(disciplina, index) {
     el('td', {}, [
       el(
         'button',
-        { className: 'btn btn-danger', type: 'button', onclick: () => removeDisciplinaRow(index) },
-        [el('i', { className: 'bi bi-trash' })]
+        {
+          className: 'btn btn-danger',
+          type: 'button',
+          'aria-label': `Remover ${disciplina.codigo || `disciplina ${index + 1}`}`,
+          title: 'Remover disciplina',
+          onclick: () => removeDisciplinaRow(index),
+        },
+        [el('i', { className: 'bi bi-trash', 'aria-hidden': 'true' })]
       ),
     ]),
   ]);
@@ -826,13 +845,14 @@ function initQuickCalculator() {
 
   function renderQuickTable(items) {
     const table = el('table', {}, [
+      el('caption', {}, 'Disciplinas do cálculo rápido'),
       el('thead', {}, [
         el('tr', {}, [
-          el('th', {}, 'Código'),
-          el('th', {}, 'Disciplina'),
-          el('th', {}, 'CrR'),
-          el('th', {}, 'Nota'),
-          el('th', {}, ''),
+          el('th', { scope: 'col' }, 'Código'),
+          el('th', { scope: 'col' }, 'Disciplina'),
+          el('th', { scope: 'col' }, 'CrR'),
+          el('th', { scope: 'col' }, 'Nota'),
+          el('td', {}),
         ]),
       ]),
     ]);
@@ -882,10 +902,11 @@ function initQuickCalculator() {
                 {
                   type: 'button',
                   className: 'btn btn-icon btn-danger',
-                  title: 'Remover',
+                  'aria-label': `Remover ${disciplina.codigo || `disciplina ${index + 1}`}`,
+                  title: 'Remover disciplina',
                   onclick: () => removeDisciplina(index),
                 },
-                [el('i', { className: 'bi bi-trash' })]
+                [el('i', { className: 'bi bi-trash', 'aria-hidden': 'true' })]
               ),
             ]),
           ])
@@ -953,6 +974,54 @@ function periodoKey(periodo) {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/**
+ * Calcula os pontos das duas séries do gráfico de evolução (CR do período e
+ * CR acumulado), ignorando registros sem disciplinas que conferem grau
+ * (ex.: bloco de créditos transferidos "2023"), que derrubariam a linha.
+ * @param {Array<object>} periodosOrdenados Períodos já ordenados cronologicamente.
+ * @returns {Array<object>}
+ */
+function calcularPontosGrafico(periodosOrdenados) {
+  return periodosOrdenados
+    .map((periodo, index) => ({
+      periodo: periodo.periodo || `${index + 1}`,
+      crPeriodo: calcularCRAcumulado({ periodos: [periodo] }).crCalculado,
+      crAcumulado: calcularCRAcumulado({
+        periodos: periodosOrdenados.slice(0, index + 1),
+      }).crCalculado,
+      crRComGrau: calcularCRAcumulado({ periodos: [periodo] }).crRComGrau,
+      disciplinas: periodo.disciplinas || [],
+    }))
+    .filter((p) => p.crRComGrau > 0);
+}
+
+/**
+ * Re-renderiza o card do gráfico no resize da janela, com throttle via
+ * requestAnimationFrame para não sobrecarregar o navegador. Substitui apenas
+ * o card do gráfico, preservando o estado dos accordions de eixos.
+ */
+function initChartResize() {
+  let rafId = null;
+  window.addEventListener('resize', () => {
+    if (rafId !== null) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      const container = document.getElementById('analytics-content');
+      const panel = document.getElementById('tab-analytics');
+      if (!container || !panel?.classList.contains('active')) return;
+
+      const periodos = state.historyData?.periodos;
+      const primeiroCard = container.firstElementChild;
+      if (!periodos?.length || !primeiroCard) return;
+
+      const ordenados = [...periodos].sort(
+        (a, b) => periodoKey(a.periodo) - periodoKey(b.periodo)
+      );
+      container.replaceChild(renderChartCard(calcularPontosGrafico(ordenados)), primeiroCard);
+    });
+  });
+}
+
 function svgEl(tag, attrs = {}, children) {
   const node = document.createElementNS(SVG_NS, tag);
   Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
@@ -980,17 +1049,7 @@ function renderAnalytics() {
   }
 
   const periodos = [...data.periodos].sort((a, b) => periodoKey(a.periodo) - periodoKey(b.periodo));
-  const pontos = periodos
-    .map((periodo, index) => ({
-      periodo: periodo.periodo || `${index + 1}`,
-      crPeriodo: calcularCRAcumulado({ periodos: [periodo] }).crCalculado,
-      crAcumulado: calcularCRAcumulado({ periodos: periodos.slice(0, index + 1) }).crCalculado,
-      crRComGrau: calcularCRAcumulado({ periodos: [periodo] }).crRComGrau,
-      disciplinas: periodo.disciplinas || [],
-    }))
-    // Ignora registros sem disciplinas que conferem grau (ex.: bloco de
-    // créditos transferidos "2023"), que derrubariam a linha do gráfico.
-    .filter((p) => p.crRComGrau > 0);
+  const pontos = calcularPontosGrafico(periodos);
 
   container.appendChild(renderChartCard(pontos));
   container.appendChild(renderMetricasHistoricas(periodos, data.resumo, pontos));
@@ -1066,6 +1125,8 @@ function renderChartCard(pontos) {
     class: 'chart-line chart-line-acumulado',
   }));
 
+  // Tooltip singleton: um único nó é reaproveitado em todos os hovers,
+  // evitando recriar elementos do DOM a cada evento de mouse.
   const tooltip = el('div', { className: 'chart-tooltip', role: 'tooltip' });
   tooltip.style.display = 'none';
 
@@ -1238,13 +1299,14 @@ function renderEixoCard(eixo) {
   const body = el('div', { className: 'eixo-body hidden' }, [
     el('div', { className: 'table-container' }, [
       el('table', {}, [
+        el('caption', {}, `Disciplinas cursadas no eixo ${eixo.eixo}`),
         el('thead', {}, [
           el('tr', {}, [
-            el('th', {}, 'Código'),
-            el('th', {}, 'Nome'),
-            el('th', {}, 'CrR'),
-            el('th', {}, 'Grau'),
-            el('th', {}, 'SF'),
+            el('th', { scope: 'col' }, 'Código'),
+            el('th', { scope: 'col' }, 'Nome'),
+            el('th', { scope: 'col' }, 'CrR'),
+            el('th', { scope: 'col' }, 'Grau'),
+            el('th', { scope: 'col' }, 'SF'),
           ]),
         ]),
         el('tbody', {},
