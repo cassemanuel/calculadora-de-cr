@@ -25,6 +25,11 @@ function detectarStatusPendente(line) {
   return null;
 }
 
+function hasNotaAprovacao(line) {
+  // Notas de aprovação no BOA aparecem como 5.0 a 10.0 na coluna direita.
+  return /\b([5-9]\.\d|10\.0)\b/.test(line);
+}
+
 function extractNome(texto, idxCodigo) {
   // Trecho imediatamente antes do código (até 70 chars é suficiente para nome + créditos).
   let trecho = texto.slice(Math.max(0, idxCodigo - 70), idxCodigo);
@@ -33,7 +38,7 @@ function extractNome(texto, idxCodigo) {
   // Padrão: CH Período Nome Créditos (ex: "60 4Comput ... 4.0").
   const match = trecho.match(/^(\d+)\s+(\d)\s*(.*?)\s*(\d+\.\d)$/);
   if (match) {
-    return match[3].replace(/^\d+\s+/, '').trim();
+    return match[3].replace(/^\s*\d+\s+/, '').trim();
   }
 
   // Fallback: nome entre o primeiro número e o último decimal.
@@ -41,7 +46,7 @@ function extractNome(texto, idxCodigo) {
   if (numeros.length >= 2) {
     const inicio = numeros[0].index + numeros[0][0].length;
     const fim = numeros[numeros.length - 1].index;
-    return trecho.slice(inicio, fim).replace(/^\d+\s+/, '').trim();
+    return trecho.slice(inicio, fim).replace(/^\s*\d+\s+/, '').trim();
   }
 
   return '';
@@ -129,6 +134,9 @@ export function parseBOA(text) {
     const chave = `${codigo}-${line.length}`;
     if (vistos.has(chave)) return;
     vistos.add(chave);
+
+    // Descarta linha que já contém nota de aprovação (matéria cursada/equivalente).
+    if (hasNotaAprovacao(line)) return;
 
     const nome = extractNome(line, idxCodigo);
     const crR = extractCreditos(line, idxCodigo);

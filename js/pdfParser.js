@@ -10,7 +10,7 @@
 import { disciplinaConferGrau } from './calculator.js';
 
 const HEADER_REGEX = /CH\s+SFGrau\s+CrO\s+PontosPer[íi]odo\s+C[óo]digo\s+Nome\s+da\s+Disciplina\/RCC\s+CrR/i;
-const PERIODO_REGEX = /^\d{4}(?:\/\d)?$/;
+const PERIODO_REGEX = /^\d{4}\s*\/\s*\d$|^\d{4}$/;
 const CODIGO_SITUACAO_REGEX = /([A-Z]+\d+)\s+(AP|RM|RF|RFM|NCG|NCC|T|CURSANDO)$/i;
 const SITUACOES = ['AP', 'RM', 'RF', 'RFM', 'NCG', 'NCC', 'T', 'CURSANDO'];
 
@@ -51,7 +51,11 @@ function agruparItensPorLinha(items) {
   for (const item of items) {
     if (!item.str || item.str.trim() === '') continue;
 
-    const y = Math.round(item.transform[5] / TOLERANCIA_Y) * TOLERANCIA_Y;
+    const rawY = item.transform?.[5];
+    const y = typeof rawY === 'number' && !isNaN(rawY)
+      ? Math.round(rawY / TOLERANCIA_Y) * TOLERANCIA_Y
+      : 0;
+
     let grupo = grupos.find((g) => Math.abs(g.y - y) <= TOLERANCIA_Y);
 
     if (!grupo) {
@@ -67,7 +71,7 @@ function agruparItensPorLinha(items) {
     .sort((a, b) => b.y - a.y)
     .map((g) =>
       g.items
-        .sort((a, b) => a.transform[4] - b.transform[4])
+        .sort((a, b) => (a.transform?.[4] ?? 0) - (b.transform?.[4] ?? 0))
         .map((item) => item.str)
         .join(' ')
     );
