@@ -1,4 +1,7 @@
-import { loadThemePreference, saveThemePreference } from './storage.js';
+import { loadThemePreference, saveThemePreference, saveHistory } from './storage.js';
+import { processarPDF } from './pdfParser.js';
+import { calcularCRAcumulado } from './calculator.js';
+import { el, badgeClassForSituacao, clearElement } from './ui.js';
 
 /**
  * Inicializa a aplicação.
@@ -98,6 +101,9 @@ function initTabs() {
 function initDropzone() {
   const dropzone = document.getElementById('pdf-dropzone');
   const input = document.getElementById('pdf-input');
+  const progress = document.getElementById('pdf-progress');
+  const progressBar = document.getElementById('pdf-progress-bar');
+  const report = document.getElementById('pdf-report');
 
   if (!dropzone || !input) return;
 
@@ -116,9 +122,158 @@ function initDropzone() {
   });
 
   input.addEventListener('change', () => {
-    // TODO: Etapa 3 – integrar com pdfParser.js
-    console.log('Arquivo selecionado:', input.files?.[0]?.name);
+    const file = input.files?.[0];
+    if (!file) return;
+    handlePDFUpload(file, { progress, progressBar, report });
   });
+}
+
+/**
+ * Processa o arquivo PDF selecionado.
+ */
+async function handlePDFUpload(file, { progress, progressBar, report }) {
+  progress?.classList.remove('hidden');
+  progressBar && (progressBar.style.width = '0%');
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const data = await processarPDF(arrayBuffer, (pct) => {
+      if (progressBar) progressBar.style.width = `${Math.round(pct * 100)}%`;
+    });
+
+    const cr = calcularCRAcumulado(data);
+    data.resumo = cr;
+
+    saveHistory(data);
+    renderReport(report, data);
+
+    console.log('Histórico parseado:', data);
+  } catch (err) {
+    console.error(err);
+    if (report) {
+      clearElement(report);
+      report.classList.remove('hidden');
+      report.appendChild(
+        el('div', { className: 'card' }, [
+          el('h3', {}, 'Erro ao processar PDF'),
+          el('p', { className: 'text-muted' }, err.message),
+        ])
+      );
+    }
+  } finally {
+    progress?.classList.add('hidden');
+  }
+}
+
+/**
+ * Renderiza o relatório de metadados, resumo e períodos.
+ */
+function renderReport(container, data) {
+  if (!container) return;
+  clearElement(container);
+  container.classList.remove('hidden');
+
+  const { metadata, periodos, resumo } = data;
+
+  // Cards de metadados e resumo
+  const headerCards = el('div', { className: 'cards-grid' }, [
+    renderMetadataCard(metadata),
+    renderResumoCard(resumo),
+  ]);
+  container.appendChild(headerCards);
+
+  // Tabela por período
+  if (periodos?.length) {
+    const periodosSection = el('section', { className: 'periodos-list' }, [
+      el('h3', {}, 'Disciplinas por Período'),
+    ]);
+
+    periodos.forEach((periodo) => {
+      periodosSection.appendChild(renderPeriodo(periodo));
+    });
+
+    container.appendChild(periodosSection);
+  }
+}
+
+function renderMetadataCard(metadata) {
+  const items = [
+    ['Nome', metadata.nome],
+    ['DRE', metadata.dre],
+    ['Curso', metadata.curso],
+    ['Ingresso', metadata.ingresso],
+    ['Emissão', metadata.emissao],
+  ]
+    .filter(([, value]) => value)
+    .map(([label, value]) => el('p', {}, [el('strong', {}, `${label}: `), value]));
+
+  return el('div', { className: 'card' }, [
+    el('h3', {}, 'Dados do Aluno'),
+    ...items,
+  ]);
+}
+
+function renderResumoCard(resumo) {
+  return el('div', { className: 'card' }, [
+    el('h3', {}, 'Resumo do CR'),
+    el('p', {}, [
+      el('strong', {}, 'Créditos com grau: '),
+      resumo.crRComGrau?.toFixed(1) ?? '-',
+    ]),
+    el('p', {}, [
+      el('strong', {}, 'Pontos totais: '),
+      resumo.pontosTotais?.toFixed(1) ?? '-',
+    ]),
+    el('p', {}, [
+      el('strong', {}, 'CR calculado: '),
+      resumo.crCalculado?.toFixed(3) ?? '-',
+    ]),
+  ]);
+}
+
+function renderPeriodo(periodo) {
+  const crPeriodo = calcularCRAcumulado({ periodos: [periodo] });
+  const header = el('button', { className: 'periodo-header' }, [
+    el('span', {}, periodo.periodo || 'Período não identificado'),
+    el('span', {}, `CR: ${crPeriodo.crCalculado.toFixed(3)} — ${periodo.disciplinas.length} disciplinas`),
+  ]);
+
+  const table = el('table', {}, [
+    el('thead', {}, [
+      el('tr', {}, [
+        el('th', {}, 'Código'),
+        el('th', {}, 'Disciplina'),
+        el('th', {}, 'CH'),
+        el('th', {}, 'CrR'),
+        el('th', {}, 'Grau'),
+        el('th', {}, 'Pontos'),
+        el('th', {}, 'SF'),
+      ]),
+    ]),
+    el(
+      'tbody',
+      {},
+      periodo.disciplinas.map((d) =>
+        el('tr', { className: d.conferGrau ? '' : 'row-muted' }, [
+          el('td', {}, d.codigo),
+          el('td', {}, d.nome),
+          el('td', {}, d.ch?.toString?.() ?? '-'),
+          el('td', {}, d.crR?.toString?.() ?? '-'),
+          el('td', {}, d.grau?.toString?.() ?? '-'),
+          el('td', {}, d.pontos?.toString?.() ?? '-'),
+          el('td', {}, [el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` }, d.situacao)]),
+        ])
+      )
+    ),
+  ]);
+
+  const body = el('div', { className: 'periodo-body hidden' }, [table]);
+
+  header.addEventListener('click', () => {
+    body.classList.toggle('hidden');
+  });
+
+  return el('div', { className: 'card periodo-card' }, [header, body]);
 }
 
 init();

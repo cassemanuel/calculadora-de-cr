@@ -559,6 +559,63 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(102, 125, 166, 0.25);
 }
 
+/* ----- Report / Períodos ----- */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.report {
+  margin-top: var(--spacing-xl);
+}
+
+.periodos-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.periodo-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.periodo-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--bg-secondary);
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.periodo-header:hover {
+  background-color: var(--bg-hover);
+}
+
+.periodo-body {
+  padding: var(--spacing-md);
+}
+
+.periodo-body.hidden {
+  display: none;
+}
+
+.row-muted {
+  opacity: 0.7;
+  font-style: italic;
+}
+
 /* ----- Footer ----- */
 .app-footer {
   margin-top: auto;
