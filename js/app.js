@@ -242,10 +242,14 @@ function renderMetadataCard(metadata) {
     : null;
   const crAtual = state.historyData?.resumo?.crCalculado;
 
+  const cursoValue = metadata.curso
+    ? el('a', { href: 'https://siga.ufrj.br/sira/repositorio-curriculo/ListaCursos.html', target: '_blank' }, metadata.curso)
+    : null;
+
   const items = [
     ['Nome', metadata.nome],
     ['DRE', metadata.dre],
-    ['Curso', metadata.curso],
+    ['Curso', cursoValue],
     ['Ingresso', metadata.ingresso],
     ['Período atual', lastPeriodo],
     ['CR atual', crAtual != null ? formatNumberBR(crAtual, 3) : null],
@@ -540,8 +544,11 @@ async function importBOAForSimulator(container) {
     }
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const { obrigatorias } = await processarBOA(arrayBuffer);
-      const pendentes = obrigatorias.filter((d) => d.status === 'pendente' || d.status === 'cursando');
+      const { obrigatorias, optativas } = await processarBOA(arrayBuffer);
+      const todas = [...obrigatorias, ...optativas];
+      const pendentes = todas.filter(
+        (d) => d.status === 'pendente' || d.status === 'cursando' || d.status === 'inscricao_facultada'
+      );
 
       if (pendentes.length === 0) {
         alert('Nenhuma disciplina pendente encontrada no BOA.');

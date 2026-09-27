@@ -22,7 +22,7 @@ const SITUACOES = ['AP', 'RM', 'RF', 'RFM', 'NCG', 'NCC', 'T', 'CURSANDO'];
  */
 export async function extractTextFromPDF(pdfData, onProgress) {
   if (!window.pdfjsLib) {
-    throw new Error('pdfjs-dist não está disponível.');
+    throw new Error('pdf.js não está disponível.');
   }
 
   const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
@@ -31,8 +31,10 @@ export async function extractTextFromPDF(pdfData, onProgress) {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items.map((item) => item.str).join(' ');
-    lines.push(...pageText.split('\n').map((l) => l.trim()).filter(Boolean));
+
+    // Agrupa os itens por coordenada Y para reconstruir as linhas do PDF.
+    const linhasPagina = agruparItensPorLinha(textContent.items);
+    lines.push(...linhasPagina.map((l) => l.trim()).filter(Boolean));
 
     if (onProgress) {
       onProgress(i / pdf.numPages);
@@ -40,6 +42,35 @@ export async function extractTextFromPDF(pdfData, onProgress) {
   }
 
   return lines;
+}
+
+function agruparItensPorLinha(items) {
+  const TOLERANCIA_Y = 2;
+  const grupos = [];
+
+  for (const item of items) {
+    if (!item.str || item.str.trim() === '') continue;
+
+    const y = Math.round(item.transform[5] / TOLERANCIA_Y) * TOLERANCIA_Y;
+    let grupo = grupos.find((g) => Math.abs(g.y - y) <= TOLERANCIA_Y);
+
+    if (!grupo) {
+      grupo = { y, items: [] };
+      grupos.push(grupo);
+    }
+
+    grupo.items.push(item);
+  }
+
+  // Ordena por Y decrescente (de cima para baixo) e, dentro de cada linha, por X.
+  return grupos
+    .sort((a, b) => b.y - a.y)
+    .map((g) =>
+      g.items
+        .sort((a, b) => a.transform[4] - b.transform[4])
+        .map((item) => item.str)
+        .join(' ')
+    );
 }
 
 /**
@@ -108,7 +139,14 @@ export function parseMetadata(lines) {
     const nextLine = lines[i + 1] || '';
 
     if (!metadata.nome) {
-      const nomeMatch = line.match(/([A-ZÁ-ÚÀ-Ù\s]+?)\s*Nome\s*Civil/i);
+      // Tenta capturar o nome logo depois de "Nome Civil".
+      let nomeMatch = line.match(/Nome\s*Civil\s*([A-ZÁ-ÚÀ-Ù\s]+?)(?=\s+Pai|\s+Mãe|\s+Naturalidade|$)/i);
+      if (nomeMatch) {
+        metadata.nome = nomeMatch[1].trim();
+        continue;
+      }
+      // Fallback: nome vem antes de "Nome Civil" (texto colado do SIGA).
+      nomeMatch = line.match(/([A-ZÁ-ÚÀ-Ù\s]+?)\s*Nome\s*Civil/i);
       if (nomeMatch) {
         metadata.nome = nomeMatch[1].trim();
         continue;

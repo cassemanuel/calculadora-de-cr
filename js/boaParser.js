@@ -14,7 +14,7 @@ const CODIGO_REGEX = /([A-Z]{2,}\d+[A-Z]?\d*)/;
  */
 export async function extractBOAText(pdfData) {
   if (!window.pdfjsLib) {
-    throw new Error('pdfjs-dist não está disponível.');
+    throw new Error('pdf.js não está disponível.');
   }
 
   const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
@@ -23,23 +23,52 @@ export async function extractBOAText(pdfData) {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items.map((item) => item.str).join(' ');
-    lines.push(...pageText.split('\n').map((l) => l.trim()).filter(Boolean));
+    const linhasPagina = agruparItensPorLinha(textContent.items);
+    lines.push(...linhasPagina.map((l) => l.trim()).filter(Boolean));
   }
 
   return lines;
 }
 
+function agruparItensPorLinha(items) {
+  const TOLERANCIA_Y = 2;
+  const grupos = [];
+
+  for (const item of items) {
+    if (!item.str || item.str.trim() === '') continue;
+
+    const y = Math.round(item.transform[5] / TOLERANCIA_Y) * TOLERANCIA_Y;
+    let grupo = grupos.find((g) => Math.abs(g.y - y) <= TOLERANCIA_Y);
+
+    if (!grupo) {
+      grupo = { y, items: [] };
+      grupos.push(grupo);
+    }
+
+    grupo.items.push(item);
+  }
+
+  return grupos
+    .sort((a, b) => b.y - a.y)
+    .map((g) =>
+      g.items
+        .sort((a, b) => a.transform[4] - b.transform[4])
+        .map((item) => item.str)
+        .join(' ')
+    );
+}
+
 function detectarStatus(line) {
   const lower = line.toLowerCase();
+
   if (lower.includes('inscrição vedada')) return 'inscricao_vedada';
   if (lower.includes('inscrição facultada')) return 'inscricao_facultada';
   if (lower.includes('cursando')) return 'cursando';
-  // Se a linha contiver um código seguido de nota e nome, consideramos aprovada.
-  // Heurística simples: presença de nota numérica no meio/final.
+
+  // Procura por uma nota de aprovação isolada (>= 5 e <= 10) ao lado de um código.
   const notas = line.match(/\b(\d+(?:\.\d)?)\b/g)?.map(Number) ?? [];
-  const temNota = notas.some((n) => n >= 0 && n <= 10);
-  return temNota ? 'aprovada' : 'pendente';
+  const temNotaAprovacao = notas.some((n) => n >= 5 && n <= 10);
+  return temNotaAprovacao ? 'aprovada' : 'pendente';
 }
 
 /**
@@ -48,7 +77,7 @@ function detectarStatus(line) {
  * @returns {object|null}
  */
 export function parseBOALine(line) {
-  if (!line || line.length < 10) return null;
+  if (!line || line.length < 8) return null;
 
   const codigoMatch = line.match(CODIGO_REGEX);
   if (!codigoMatch) return null;
@@ -58,14 +87,11 @@ export function parseBOALine(line) {
 
   // Créditos: número decimal (ex: 4.0) colado logo antes do código.
   const creditosMatch = line.slice(0, idxCodigo).match(/(\d+\.\d)\s*$/);
-  if (!creditosMatch) return null;
-  const crR = parseFloat(creditosMatch[1]);
+  const crR = creditosMatch ? parseFloat(creditosMatch[1]) : 4;
 
   // Nome: texto entre início e os créditos, removendo CH e período.
   const prefixo = line.slice(0, idxCodigo).replace(/\s*\d+\.\d\s*$/, '').trim();
-  const nome = prefixo
-    .replace(/^\d+\s+\d+\s*/, '')
-    .trim();
+  const nome = prefixo.replace(/^\d+\s+\d+\s*/, '').trim();
 
   // Período recomendado: segundo número isolado no início da linha (ex: "60 1").
   const periodoMatch = prefixo.match(/^(\d+)\s+(\d+)/);
