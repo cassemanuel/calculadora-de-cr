@@ -600,7 +600,7 @@ async function importBOAForSimulator(container) {
       const arrayBuffer = await file.arrayBuffer();
       const { obrigatorias, optativas } = await processarBOA(arrayBuffer);
       const todas = [...obrigatorias, ...optativas];
-      const statusPendentes = ['pendente', 'cursando', 'inscricao_facultada', 'inscricao_vedada'];
+      const statusPendentes = ['pendente', 'cursando', 'inscricao_facultada', 'inscricao_vedada', 'a_cursar'];
       const pendentes = todas.filter(
         (d) => statusPendentes.includes(d.status) && d.periodoRecomendado != null
       );

@@ -11,8 +11,14 @@ import { disciplinaConferGrau } from './calculator.js';
 
 const HEADER_REGEX = /CH\s+SFGrau\s+CrO\s+PontosPer[íi]odo\s+C[óo]digo\s+Nome\s+da\s+Disciplina\/RCC\s+CrR/i;
 const PERIODO_INICIO_REGEX = /^(\d{4}\s*\/\s*\d|\d{4})\b/;
-const CODIGO_SITUACAO_REGEX = /([A-Z]+\d+)\s+(AP|RM|RF|RFM|NCG|NCC|T|CURSANDO)$/i;
 const SITUACOES = ['AP', 'RM', 'RF', 'RFM', 'NCG', 'NCC', 'T', 'CURSANDO'];
+const SF_FIM_REGEX = new RegExp(`\\s+(${SITUACOES.join('|')})\\s*$`, 'i');
+const CODIGO_INICIO_REGEX = /^([A-Z]{2,4}[A-Z0-9]?\d{2,4})\s+/;
+const CAMPO_TOKEN = String.raw`\d+(?:\.\d+)?|NCG|NCC|\*{2,}|T`;
+const CAMPOS_FINAIS_REGEX = new RegExp(
+  `(${CAMPO_TOKEN})\\s+(${CAMPO_TOKEN})\\s+(${CAMPO_TOKEN})\\s+(${CAMPO_TOKEN})\\s+(${CAMPO_TOKEN})$`,
+  'i'
+);
 
 /**
  * Extrai texto de um arquivo PDF usando pdfjs-dist.
@@ -121,7 +127,32 @@ export function limparLinhas(lines) {
     /^Creditos\s+transferidos/i,
   ];
 
-  return lines.filter((line) => !ignorar.some((re) => re.test(line)));
+  // Remove trechos de legenda colados ao final das linhas de disciplina.
+  const removerLegenda = [
+    /\s*AP\s+-\s+APROVADO/gi,
+    /\s*RF\s+-\s+REP\.\s*P\/\s*FREQUÊNCIA/gi,
+    /\s*RM\s+-\s+REPROVADO\s+P\/\s*MÉDIA/gi,
+    /\s*RFM\s+-\s+REP\.\s*P\/\s*FREQ\.\s*MÉDIA/gi,
+    /\s*NCC\s+-\s+NÃO\s+CONFERE\s+CRÉDITO/gi,
+    /\s*NCG\s+-\s+NÃO\s+CONFERE\s+GRAU/gi,
+    /\s*CR\s+-\s+COEF\.\s*DE\s*RENDIMENTO/gi,
+    /\s*CrR\s+-\s+CRÉD\.\s*REQUISITADOS/gi,
+    /\s*CrO\s+-\s+CRÉDITOS\s+OBTIDOS/gi,
+    /\s*CH\s+-\s+CARGA\s+HORÁRIA/gi,
+    /\s*SF\s+-\s+SITUAÇÃO\s+FINAL/gi,
+    /\s*SEM\s+VALOR\s+OFICIAL\b/gi,
+    /\s*LEGENDA\b.*$/gi,
+  ];
+
+  return lines
+    .map((line) => {
+      let cleaned = line;
+      removerLegenda.forEach((re) => {
+        cleaned = cleaned.replace(re, '');
+      });
+      return cleaned.trim();
+    })
+    .filter((line) => line && !ignorar.some((re) => re.test(line)));
 }
 
 /**
@@ -144,7 +175,7 @@ export function parseMetadata(lines) {
 
     if (!metadata.nome) {
       // Tenta capturar o nome logo depois de "Nome Civil".
-      let nomeMatch = line.match(/Nome\s*Civil\s*([A-ZÁ-ÚÀ-Ù\s]+?)(?=\s+Pai|\s+Mãe|\s+Naturalidade|$)/i);
+      let nomeMatch = line.match(/Nome\s*Civil\s*([A-ZÁ-ÚÀ-Ù\s]+?)(?=\s+\d|\s+Pai|\s+Mãe|\s+Naturalidade|$)/i);
       if (nomeMatch) {
         metadata.nome = nomeMatch[1].trim();
         continue;
@@ -176,7 +207,7 @@ export function parseMetadata(lines) {
     if (!metadata.curso) {
       const cursoMatch = line.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-Úá-ú\s]+?)(?=\s*Reconhecimento|\s*Portaria|\s*Unidade|\s*Turno|$)/i);
       if (cursoMatch) {
-        metadata.curso = cursoMatch[1].trim();
+        metadata.curso = cursoMatch[1].trim().replace(/\s+Curso$/i, '');
         continue;
       }
     }
@@ -202,6 +233,11 @@ export function parseMetadata(lines) {
         continue;
       }
     }
+
+    if (!metadata.dre && /Nome\s*Civil/i.test(line)) {
+      const candidatos = line.match(/\b\d{9,10}\b/g);
+      if (candidatos) metadata.dre = candidatos[candidatos.length - 1];
+    }
   }
 
   return metadata;
@@ -223,74 +259,45 @@ export function parseDisciplinaLine(line) {
     '$1'
   );
 
-  // Separa situação final e código no final da linha.
-  // Primeiro encontra o SF (case-insensitive); depois o código, que é
-  // composto por letras maiúsculas seguidas de dígitos (case-sensitive).
-  const sfRegex = new RegExp(`\\s+(${SITUACOES.join('|')})$`, 'i');
-  const sfMatch = semAno.match(sfRegex);
+  // Situação final no final da linha.
+  const sfMatch = semAno.match(SF_FIM_REGEX);
   if (!sfMatch) return null;
-
   const situacao = sfMatch[1].toUpperCase();
   const antesSF = semAno.slice(0, semAno.length - sfMatch[0].length).trim();
 
-  const codigoMatch = antesSF.match(/([A-Z]+\d+)$/);
+  // Código da disciplina no início da linha (ex: MAB120, ICPX06, NCG011).
+  const codigoMatch = antesSF.match(CODIGO_INICIO_REGEX);
   if (!codigoMatch) return null;
-
   const codigo = codigoMatch[1];
-  const prefixo = antesSF.slice(0, antesSF.length - codigo.length).trim();
+  const resto = antesSF.slice(codigoMatch[0].length).trim();
 
-  // Tenta dividir o prefixo em <campos numéricos/texto> + <CH> + <nome>.
-  // A CH é o último número decimal (precedido por espaço) antes do nome começar.
-  let chMatch = prefixo.match(/^(.*)\s(\d+\.\d+)([A-Za-zÁ-Úá-ú].*)$/);
-  let camposStr;
-  let ch;
-  let nome;
+  // Os últimos 5 campos do boletim são: CrR CH Grau CrO Pontos.
+  // Podem ser numéricos ou textuais (NCG, NCC, *****, T).
+  const camposMatch = resto.match(CAMPOS_FINAIS_REGEX);
+  if (!camposMatch) return null;
 
-  if (chMatch) {
-    camposStr = chMatch[1].trim();
-    ch = parseFloat(chMatch[2]);
-    nome = chMatch[3].trim();
-  } else {
-    // Fallback para quando a CH é textual (ex: ncc) ou ausente.
-    // Os campos textuais podem estar colados uns com os outros ou com o
-    // nome; inserimos espaços temporários para separá-los.
-    const normalizado = prefixo
-      .replace(/(\*{3,})(?=[A-Za-zÁ-Úá-ú])/gi, '$1 ')
-      .replace(/(ncg|ncc)(?=[A-Za-zÁ-Úá-ú])/gi, '$1 ');
-    const parts = normalizado.split(/\s+/).filter(Boolean);
-    if (parts.length >= 6 && parts.slice(0, 5).every(isCampoTextualDisciplina)) {
-      camposStr = parts.slice(0, 4).join(' ');
-      ch = parts[4];
-      nome = parts.slice(5).join(' ');
-    } else {
-      return null;
-    }
-  }
+  const [crRRaw, chRaw, grauRaw, crORaw, pontosRaw] = camposMatch.slice(1);
+  const nomeBruto = resto.slice(0, resto.length - camposMatch[0].length).trim();
 
-  // Extrai os quatro campos iniciais: grau, pontos, crO, crR.
-  // A formatação do SIGA às vezes cola os números, então extraímos
-  // tokens numéricos ou textuais conhecidos.
-  const tokens = (camposStr.match(/(\d+\.\d)|([A-Za-z*]+)/g) || []).filter(Boolean);
-  if (tokens.length < 4) return null;
+  // Remove fragmentos de professor colados no nome (ex: "Prof. NOME - (TITULAÇÃO)").
+  const nome = nomeBruto
+    .replace(/\bProf\..*$/i, '')
+    .replace(/[\s\-–(]+$/, '')
+    .trim();
 
-  const [grauRaw, pontosRaw, crORaw, crRRaw] = tokens;
+  const grau = parseCampoDisciplina(grauRaw);
 
   return {
-    grau: parseCampoDisciplina(grauRaw),
+    grau,
     pontos: parseCampoDisciplina(pontosRaw),
     crO: parseCampoDisciplina(crORaw),
     crR: parseCampoDisciplina(crRRaw),
-    ch,
-    nome,
+    ch: parseCampoDisciplina(chRaw),
+    nome: nome || codigo,
     codigo,
     situacao,
-    conferGrau: disciplinaConferGrau({ situacao, grau: parseCampoDisciplina(grauRaw) }),
+    conferGrau: disciplinaConferGrau({ situacao, grau }),
   };
-}
-
-function isCampoTextualDisciplina(value) {
-  const upper = String(value).toUpperCase();
-  return upper === 'NCG' || upper === 'NCC' || upper === '*****';
 }
 
 function parseCampoDisciplina(value) {
