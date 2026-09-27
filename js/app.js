@@ -9,11 +9,13 @@ import {
 } from './storage.js';
 import { processarPDF } from './pdfParser.js';
 import { processarBOA } from './boaParser.js';
+import { calcularMetricasPorEixo } from './eixos.js';
 import {
   calcularCRAcumulado,
   calcularCRDisciplinas,
   calcularMetaReversa,
   calcularImpactoCR,
+  disciplinaConferGrau,
 } from './calculator.js';
 import { el, badgeClassForSituacao, clearElement, parseNumberBR, formatNumberBR } from './ui.js';
 
@@ -106,6 +108,10 @@ function initTabs() {
           panel.setAttribute('hidden', '');
         }
       });
+
+      if (targetTab === 'analytics') {
+        renderAnalytics();
+      }
     });
   });
 }
@@ -291,6 +297,8 @@ function renderReport(container, data) {
 
     container.appendChild(periodosSection);
   }
+
+  renderAnalytics();
 }
 
 function renderMetadataCard(metadata) {
@@ -924,6 +932,203 @@ function initQuickCalculator() {
   container.appendChild(actions);
   container.appendChild(tableContainer);
   renderTable();
+}
+
+/* ============================================================
+   Análise e Evolução
+   ============================================================ */
+
+function periodoKey(periodo) {
+  const match = String(periodo || '').match(/(\d{4})\s*(?:\/\s*(\d))?/);
+  if (!match) return Infinity;
+  return parseInt(match[1], 10) * 10 + (parseInt(match[2], 10) || 0);
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgEl(tag, attrs = {}, children) {
+  const node = document.createElementNS(SVG_NS, tag);
+  Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+  (Array.isArray(children) ? children : [children]).forEach((child) => {
+    if (child instanceof Node) node.appendChild(child);
+    else if (child !== null && child !== undefined) node.appendChild(document.createTextNode(String(child)));
+  });
+  return node;
+}
+
+function renderAnalytics() {
+  const container = document.getElementById('analytics-content');
+  if (!container) return;
+  clearElement(container);
+
+  const data = state.historyData;
+  if (!data?.periodos?.length) {
+    container.appendChild(
+      el('div', { className: 'card' }, [
+        el('p', { className: 'text-muted' },
+          'Importe seu boletim na aba "Histórico via PDF" para visualizar a análise histórica.'),
+      ])
+    );
+    return;
+  }
+
+  const periodos = [...data.periodos].sort((a, b) => periodoKey(a.periodo) - periodoKey(b.periodo));
+  const pontos = periodos.map((periodo, index) => ({
+    periodo: periodo.periodo || `${index + 1}`,
+    crPeriodo: calcularCRAcumulado({ periodos: [periodo] }).crCalculado,
+    crAcumulado: calcularCRAcumulado({ periodos: periodos.slice(0, index + 1) }).crCalculado,
+    crRComGrau: calcularCRAcumulado({ periodos: [periodo] }).crRComGrau,
+  }));
+
+  container.appendChild(renderChartCard(pontos));
+  container.appendChild(renderMetricasHistoricas(periodos, data.resumo, pontos));
+  container.appendChild(renderEixosCard(data));
+}
+
+function renderChartCard(pontos) {
+  const largura = 720;
+  const altura = 300;
+  const margem = { topo: 20, direita: 20, base: 40, esquerda: 45 };
+  const w = largura - margem.esquerda - margem.direita;
+  const h = altura - margem.topo - margem.base;
+
+  const valores = pontos.flatMap((p) => [p.crPeriodo, p.crAcumulado]).filter((v) => v > 0);
+  let yMin = valores.length ? Math.max(0, Math.floor(Math.min(...valores) - 0.5)) : 0;
+  let yMax = valores.length ? Math.min(10, Math.ceil(Math.max(...valores) + 0.5)) : 10;
+  if (yMax - yMin < 1) yMax = yMin + 1;
+
+  const x = (i) => margem.esquerda + (pontos.length > 1 ? (i / (pontos.length - 1)) * w : w / 2);
+  const y = (v) => margem.topo + h - ((v - yMin) / (yMax - yMin)) * h;
+
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${largura} ${altura}`,
+    class: 'chart-svg',
+    role: 'img',
+    'aria-label': 'Gráfico de evolução do CR',
+  });
+
+  // Grade horizontal e rótulos do eixo Y.
+  for (let tick = Math.ceil(yMin); tick <= Math.floor(yMax); tick++) {
+    svg.appendChild(svgEl('line', {
+      x1: margem.esquerda, x2: largura - margem.direita,
+      y1: y(tick), y2: y(tick),
+      class: 'chart-grid-line',
+    }));
+    svg.appendChild(svgEl('text', {
+      x: margem.esquerda - 8, y: y(tick) + 4,
+      'text-anchor': 'end', class: 'chart-label',
+    }, tick));
+  }
+
+  // Rótulos do eixo X.
+  const rotacionar = pontos.length > 8;
+  pontos.forEach((p, i) => {
+    const attrs = rotacionar
+      ? { x: x(i), y: altura - 8, 'text-anchor': 'end', transform: `rotate(-30 ${x(i)} ${altura - 8})`, class: 'chart-label' }
+      : { x: x(i), y: altura - 12, 'text-anchor': 'middle', class: 'chart-label' };
+    svg.appendChild(svgEl('text', attrs, p.periodo));
+  });
+
+  const toPoints = (key) =>
+    pontos.map((p, i) => `${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ');
+
+  // Linha do CR do período (tracejada).
+  svg.appendChild(svgEl('polyline', {
+    points: toPoints('crPeriodo'),
+    class: 'chart-line chart-line-periodo',
+  }));
+  // Linha do CR acumulado (contínua).
+  svg.appendChild(svgEl('polyline', {
+    points: toPoints('crAcumulado'),
+    class: 'chart-line chart-line-acumulado',
+  }));
+
+  // Pontos interativos com tooltip.
+  pontos.forEach((p, i) => {
+    svg.appendChild(svgEl('circle', {
+      cx: x(i), cy: y(p.crAcumulado), r: 5, class: 'chart-dot chart-dot-acumulado',
+    }, svgEl('title', {}, `${p.periodo} — CR acumulado: ${formatNumberBR(p.crAcumulado, 3)}`)));
+    svg.appendChild(svgEl('circle', {
+      cx: x(i), cy: y(p.crPeriodo), r: 4, class: 'chart-dot chart-dot-periodo',
+    }, svgEl('title', {}, `${p.periodo} — CR do período: ${formatNumberBR(p.crPeriodo, 3)}`)));
+  });
+
+  const legenda = el('div', { className: 'chart-legenda' }, [
+    el('span', { className: 'chart-legenda-item' }, [
+      el('span', { className: 'chart-swatch chart-swatch-acumulado' }),
+      ' CR Acumulado',
+    ]),
+    el('span', { className: 'chart-legenda-item' }, [
+      el('span', { className: 'chart-swatch chart-swatch-periodo' }),
+      ' CR do Período',
+    ]),
+  ]);
+
+  return el('div', { className: 'card' }, [
+    el('h3', {}, 'Evolução do CR'),
+    svg,
+    legenda,
+  ]);
+}
+
+function renderMetricasHistoricas(periodos, resumo, pontos) {
+  const comGrau = pontos.filter((p) => p.crRComGrau > 0);
+  const melhor = comGrau.reduce((a, b) => (b.crPeriodo > a.crPeriodo ? b : a), comGrau[0]);
+  const pior = comGrau.reduce((a, b) => (b.crPeriodo < a.crPeriodo ? b : a), comGrau[0]);
+
+  let creditosIntegralizados = 0;
+  let aprovacoes = 0;
+  let reprovacoes = 0;
+  periodos.forEach((periodo) => {
+    (periodo.disciplinas || []).forEach((d) => {
+      const situacao = String(d.situacao || '').toUpperCase();
+      if (situacao === 'CURSANDO') return;
+      const crR = Number(d.crR);
+      if (!isNaN(crR)) creditosIntegralizados += crR;
+      if (disciplinaConferGrau(d)) {
+        if (situacao === 'AP') aprovacoes += 1;
+        else reprovacoes += 1;
+      }
+    });
+  });
+
+  const totalConcluidas = aprovacoes + reprovacoes;
+  const taxaSucesso = totalConcluidas ? (aprovacoes / totalConcluidas) * 100 : 0;
+
+  const cards = [
+    ['Melhor CR de período', melhor ? `${formatNumberBR(melhor.crPeriodo, 3)} (${melhor.periodo})` : '-'],
+    ['Pior CR de período', pior ? `${formatNumberBR(pior.crPeriodo, 3)} (${pior.periodo})` : '-'],
+    ['Créditos integralizados', `${formatNumberBR(creditosIntegralizados, 0)} de ${formatNumberBR(resumo?.crRComGrau || 0, 0)} com grau`],
+    ['Taxa de sucesso', `${formatNumberBR(taxaSucesso, 1)}% — ${aprovacoes} aprov. / ${reprovacoes} reprov.`],
+  ];
+
+  return el('div', { className: 'cards-grid' },
+    cards.map(([label, valor]) =>
+      el('div', { className: 'card metric-card' }, [
+        el('span', { className: 'cr-detail-label' }, label),
+        el('p', { className: 'metric-value' }, valor),
+      ])
+    )
+  );
+}
+
+function renderEixosCard(data) {
+  const eixos = calcularMetricasPorEixo(data);
+  if (!eixos.length) return null;
+
+  return el('div', {}, [
+    el('h3', {}, 'Desempenho por Eixo Temático'),
+    el('div', { className: 'cards-grid' },
+      eixos.map((eixo) =>
+        el('div', { className: 'card metric-card' }, [
+          el('h4', {}, eixo.eixo),
+          el('p', { className: 'metric-value' }, formatNumberBR(eixo.cr, 3)),
+          el('p', { className: 'text-muted' },
+            `${eixo.total} disciplinas · ${formatNumberBR(eixo.creditosTotais, 0)} créditos`),
+        ])
+      )
+    ),
+  ]);
 }
 
 init();

@@ -66,6 +66,14 @@
       <i class="bi bi-calculator" aria-hidden="true"></i>
       Cálculo Rápido
     </button>
+    <button
+      class="tab-btn"
+      data-tab="analytics"
+      type="button"
+    >
+      <i class="bi bi-graph-up" aria-hidden="true"></i>
+      Análise e Evolução
+    </button>
   </nav>
 
   <main class="app-main">
@@ -131,6 +139,16 @@
         </p>
       </div>
       <div id="quick-calculator-content"></div>
+    </section>
+
+    <section id="tab-analytics" class="tab-panel" aria-labelledby="tab-analytics-btn" hidden>
+      <div class="panel-header">
+        <h2>Análise e Evolução</h2>
+        <p class="text-muted">
+          Evolução do CR ao longo dos períodos e desempenho por eixo temático.
+        </p>
+      </div>
+      <div id="analytics-content"></div>
     </section>
   </main>
 
