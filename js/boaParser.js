@@ -41,6 +41,7 @@ const STATUS_MAP = [
 const PADRAO_Y_CRED_RECOM = 277;
 const PADRAO_Y_PER = 356;
 const TOLERANCIA_LINHA = 8;
+const MAX_PDF_PAGES = 25;
 
 function normalize(str) {
   return String(str)
@@ -85,7 +86,16 @@ export async function extractBOAItems(pdfData) {
     throw new Error('pdf.js não está disponível.');
   }
 
-  const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
+  const pdf = await window.pdfjsLib.getDocument({
+    data: pdfData,
+    isEvalSupported: false, // Desativa avaliação de código dinâmico
+    useSystemFonts: true,
+  }).promise;
+
+  if (pdf.numPages > MAX_PDF_PAGES) {
+    throw new Error(`PDF excede o limite de ${MAX_PDF_PAGES} páginas.`);
+  }
+
   const paginas = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {

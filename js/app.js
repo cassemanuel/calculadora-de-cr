@@ -153,6 +153,14 @@ function initDropzone() {
   });
 }
 
+const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10 MB
+
+function validatePdfFile(file) {
+  const isPdf = /\.pdf$/i.test(file?.name || '') || file?.type === 'application/pdf';
+  if (!isPdf) throw new Error('Envie um arquivo PDF válido (.pdf).');
+  if (file.size > MAX_PDF_SIZE) throw new Error('Arquivo muito grande (máx. 10 MB).');
+}
+
 async function handlePDFUpload(file, { progress, progressBar, report }) {
   progress?.classList.remove('hidden');
   if (progressBar) progressBar.style.width = '0%';
@@ -161,11 +169,13 @@ async function handlePDFUpload(file, { progress, progressBar, report }) {
   const dropzoneHint = document.querySelector('.dropzone-hint');
   if (dropzoneLabel) dropzoneLabel.textContent = 'Processando...';
 
-  // Evita que um cache antigo ou corrompido influencie o novo processamento.
-  clearHistory();
-  state.historyData = null;
-
   try {
+    validatePdfFile(file);
+
+    // Evita que um cache antigo ou corrompido influencie o novo processamento.
+    clearHistory();
+    state.historyData = null;
+
     const arrayBuffer = await file.arrayBuffer();
     const data = await processarPDF(arrayBuffer, (pct) => {
       if (progressBar) progressBar.style.width = `${Math.round(pct * 100)}%`;
@@ -634,6 +644,7 @@ async function importBOAForSimulator(container) {
       return;
     }
     try {
+      validatePdfFile(file);
       const arrayBuffer = await file.arrayBuffer();
       const { obrigatorias, optativas } = await processarBOA(arrayBuffer);
       const todas = [...obrigatorias, ...optativas];

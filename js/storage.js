@@ -98,6 +98,49 @@ export function exportJSON(historyData) {
 }
 
 /**
+ * Limpa uma string removendo caracteres de marcação e de controle,
+ * prevenindo injeção caso o valor seja exibido em contexto HTML.
+ * @param {string} str
+ * @returns {string}
+ */
+function sanitizeText(str) {
+  return str
+    .replace(/[<>]/g, '')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .slice(0, 500)
+    .trim();
+}
+
+function sanitizeValue(value) {
+  if (typeof value === 'string') return sanitizeText(value);
+  if (Array.isArray(value)) return value.map(sanitizeValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, sanitizeValue(v)])
+    );
+  }
+  return value;
+}
+
+/**
+ * Valida a estrutura do histórico importado e sanitiza os campos de texto.
+ * @param {object} data
+ * @returns {object}
+ */
+function validateHistoryData(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Arquivo JSON inválido: estrutura não reconhecida.');
+  }
+  if (data.metadata !== undefined && (typeof data.metadata !== 'object' || data.metadata === null)) {
+    throw new Error('Arquivo JSON inválido: metadata deve ser um objeto.');
+  }
+  if (!Array.isArray(data.periodos)) {
+    throw new Error('Arquivo JSON inválido: periodos deve ser uma lista.');
+  }
+  return sanitizeValue(data);
+}
+
+/**
  * Lê um arquivo JSON e retorna o conteúdo parseado.
  * @param {File} file
  * @returns {Promise<object>}
@@ -107,9 +150,9 @@ export function importJSON(file) {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        resolve(JSON.parse(reader.result));
+        resolve(validateHistoryData(JSON.parse(reader.result)));
       } catch (e) {
-        reject(new Error('Arquivo JSON inválido.'));
+        reject(e instanceof Error ? e : new Error('Arquivo JSON inválido.'));
       }
     };
     reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));

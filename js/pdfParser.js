@@ -20,6 +20,8 @@ const CAMPOS_FINAIS_REGEX = new RegExp(
   'i'
 );
 
+const MAX_PDF_PAGES = 25;
+
 /**
  * Extrai texto de um arquivo PDF usando pdfjs-dist.
  * @param {ArrayBuffer | Uint8Array} pdfData
@@ -31,7 +33,16 @@ export async function extractTextFromPDF(pdfData, onProgress) {
     throw new Error('pdf.js não está disponível.');
   }
 
-  const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
+  const pdf = await window.pdfjsLib.getDocument({
+    data: pdfData,
+    isEvalSupported: false, // Desativa avaliação de código dinâmico
+    useSystemFonts: true,
+  }).promise;
+
+  if (pdf.numPages > MAX_PDF_PAGES) {
+    throw new Error(`PDF excede o limite de ${MAX_PDF_PAGES} páginas.`);
+  }
+
   const lines = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {

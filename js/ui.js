@@ -3,6 +3,17 @@
  */
 
 /**
+ * Sanitiza uma URL permitindo apenas esquemas seguros (http/https).
+ * URLs com outros esquemas (javascript:, data:, etc.) são bloqueadas.
+ * @param {string} value
+ * @returns {string}
+ */
+export function sanitizeUrl(value) {
+  const url = String(value || '').trim();
+  return /^https?:/i.test(url) ? url : '#';
+}
+
+/**
  * Cria um elemento DOM a partir de uma tag e atributos.
  * @param {string} tag
  * @param {object} [attrs]
@@ -17,6 +28,8 @@ export function el(tag, attrs = {}, children) {
       element.className = value;
     } else if (key === 'dataset') {
       Object.assign(element.dataset, value);
+    } else if (key === 'href') {
+      element.setAttribute(key, sanitizeUrl(value));
     } else if (key.startsWith('on') && typeof value === 'function') {
       element.addEventListener(key.slice(2).toLowerCase(), value);
     } else {
