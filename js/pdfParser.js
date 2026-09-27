@@ -108,7 +108,7 @@ export function parseMetadata(lines) {
     const nextLine = lines[i + 1] || '';
 
     if (!metadata.nome) {
-      const nomeMatch = line.match(/^([A-ZÁ-ÚÀ-Ù\s]+?)\s*Nome\s*Civil/i);
+      const nomeMatch = line.match(/([A-ZÁ-ÚÀ-Ù\s]+?)\s*Nome\s*Civil/i);
       if (nomeMatch) {
         metadata.nome = nomeMatch[1].trim();
         continue;
@@ -120,6 +120,14 @@ export function parseMetadata(lines) {
       if (/^Registro$/i.test(nextLine)) {
         const m = line.match(/\b(\d{9,10})\b/);
         if (m) metadata.dre = m[1];
+        continue;
+      }
+
+      // Fallback: linha isolada com exatamente 9 ou 10 dígitos (DRE).
+      const m = line.match(/^\s*(\d{9,10})\s*$/);
+      if (m && !line.includes(' ')) {
+        metadata.dre = m[1];
+        continue;
       }
     }
 

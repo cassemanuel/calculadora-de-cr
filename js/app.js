@@ -237,14 +237,21 @@ function renderReport(container, data) {
 }
 
 function renderMetadataCard(metadata) {
+  const lastPeriodo = state.historyData?.periodos?.length
+    ? state.historyData.periodos[state.historyData.periodos.length - 1]?.periodo
+    : null;
+  const crAtual = state.historyData?.resumo?.crCalculado;
+
   const items = [
     ['Nome', metadata.nome],
     ['DRE', metadata.dre],
     ['Curso', metadata.curso],
     ['Ingresso', metadata.ingresso],
+    ['Período atual', lastPeriodo],
+    ['CR atual', crAtual != null ? formatNumberBR(crAtual, 3) : null],
     ['Emissão', metadata.emissao],
   ]
-    .filter(([, value]) => value)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .map(([label, value]) => el('p', {}, [el('strong', {}, `${label}: `), value]));
 
   return el('div', { className: 'card' }, [el('h3', {}, 'Dados do Aluno'), ...items]);
@@ -323,49 +330,28 @@ function renderPeriodo(periodo) {
    Simulador de Período Atual
    ============================================================ */
 
+// Referências aos elementos de resultado do simulador para atualização sem re-render.
+let simulatorResultEls = null;
+let metaReversaResultEl = null;
+let simulatorTableBody = null;
+
 function initSimulator() {
   const container = document.getElementById('pdf-simulator-content');
   if (!container) return;
 
-  renderSimulator(container);
+  renderSimulatorUI(container);
+  updateSimulatorResults();
 }
 
-function renderSimulator(container) {
+function getBaseResumo() {
+  return state.historyData?.resumo || { crRComGrau: 0, pontosTotais: 0, crCalculado: 0 };
+}
+
+function renderSimulatorUI(container) {
   clearElement(container);
-
-  const baseResumo = state.historyData?.resumo || { crRComGrau: 0, pontosTotais: 0, crCalculado: 0 };
-
-  const table = renderDisciplinasTable(state.simulatorDisciplinas, (updated) => {
-    state.simulatorDisciplinas = updated;
-    renderSimulator(container);
-  });
-
-  const novoCR = calcularCRAcumulado(state.historyData || {}, state.simulatorDisciplinas);
-  const impacto = calcularImpactoCR(baseResumo.crCalculado, novoCR.crCalculado);
-
-  const resumo = el('div', { className: 'cards-grid' }, [
-    el('div', { className: 'card' }, [
-      el('h4', {}, 'CR do Período'),
-      el('p', {}, formatNumberBR(calcularCRDisciplinas(state.simulatorDisciplinas).crCalculado, 3)),
-    ]),
-    el('div', { className: 'card' }, [
-      el('h4', {}, 'Novo CR Acumulado'),
-      el('p', {}, formatNumberBR(novoCR.crCalculado, 3)),
-    ]),
-    el('div', { className: 'card' }, [
-      el('h4', {}, 'Impacto no CR'),
-      el(
-        'p',
-        {},
-        `${impacto.absoluto >= 0 ? '+' : ''}${formatNumberBR(impacto.absoluto, 3)} (${formatNumberBR(
-          impacto.percentual,
-          2
-        )}%)`
-      ),
-    ]),
-  ]);
-
-  const metaSection = renderMetaReversa(baseResumo, state.simulatorDisciplinas);
+  simulatorResultEls = {};
+  metaReversaResultEl = null;
+  simulatorTableBody = null;
 
   const actions = el('div', { className: 'actions-row' }, [
     el(
@@ -380,18 +366,11 @@ function renderSimulator(container) {
     ),
     el(
       'button',
-      { className: 'btn btn-danger', type: 'button', onclick: () => { state.simulatorDisciplinas = []; renderSimulator(container); } },
+      { className: 'btn btn-danger', type: 'button', onclick: () => { state.simulatorDisciplinas = []; renderSimulatorUI(container); updateSimulatorResults(); } },
       [el('i', { className: 'bi bi-trash' }), ' Limpar']
     ),
   ]);
 
-  container.appendChild(actions);
-  container.appendChild(table);
-  container.appendChild(resumo);
-  container.appendChild(metaSection);
-}
-
-function renderDisciplinasTable(disciplinas, onChange) {
   const table = el('table', {}, [
     el('thead', {}, [
       el('tr', {}, [
@@ -402,44 +381,79 @@ function renderDisciplinasTable(disciplinas, onChange) {
         el('th', {}, 'Ações'),
       ]),
     ]),
-    el(
-      'tbody',
-      {},
-      disciplinas.length
-        ? disciplinas.map((d, i) => renderDisciplinaRow(d, i, disciplinas, onChange))
-        : [el('tr', {}, [el('td', { colspan: 5, className: 'text-muted' }, 'Nenhuma disciplina adicionada.')])]
-    ),
+    el('tbody', {}),
+  ]);
+  simulatorTableBody = table.querySelector('tbody');
+  renderSimulatorTable();
+
+  const tableContainer = el('div', { className: 'table-container' }, [table]);
+
+  const resumo = el('div', { className: 'cards-grid' }, [
+    el('div', { className: 'card' }, [
+      el('h4', {}, 'CR do Período'),
+      (simulatorResultEls.crPeriodo = el('p', {})),
+    ]),
+    el('div', { className: 'card' }, [
+      el('h4', {}, 'Novo CR Acumulado'),
+      (simulatorResultEls.novoCR = el('p', {})),
+    ]),
+    el('div', { className: 'card' }, [
+      el('h4', {}, 'Impacto no CR'),
+      (simulatorResultEls.impacto = el('p', {})),
+    ]),
   ]);
 
-  return el('div', { className: 'table-container' }, [table]);
+  const metaSection = renderMetaReversa();
+
+  container.appendChild(actions);
+  container.appendChild(tableContainer);
+  container.appendChild(resumo);
+  container.appendChild(metaSection);
 }
 
-function renderDisciplinaRow(disciplina, index, disciplinas, onChange) {
-  const updateField = (field, value) => {
-    const updated = [...disciplinas];
-    if (field === 'crR' || field === 'grau') {
-      updated[index][field] = parseNumberBR(value);
-      updated[index].pontos = updated[index].grau * updated[index].crR;
-    } else {
-      updated[index][field] = value;
-    }
-    updated[index].situacao = 'Cursando';
-    updated[index].conferGrau = true;
-    onChange(updated);
-  };
+function renderSimulatorTable() {
+  if (!simulatorTableBody) return;
+  clearElement(simulatorTableBody);
 
-  const removeRow = () => {
-    const updated = disciplinas.filter((_, i) => i !== index);
-    onChange(updated);
-  };
+  if (!state.simulatorDisciplinas.length) {
+    simulatorTableBody.appendChild(
+      el('tr', {}, [el('td', { colspan: 5, className: 'text-muted' }, 'Nenhuma disciplina adicionada.')])
+    );
+    return;
+  }
 
+  state.simulatorDisciplinas.forEach((disciplina, index) => {
+    simulatorTableBody.appendChild(renderDisciplinaRow(disciplina, index));
+  });
+}
+
+function updateDisciplinaField(index, field, value) {
+  if (field === 'crR' || field === 'grau') {
+    state.simulatorDisciplinas[index][field] = parseNumberBR(value);
+    state.simulatorDisciplinas[index].pontos =
+      state.simulatorDisciplinas[index].grau * state.simulatorDisciplinas[index].crR;
+  } else {
+    state.simulatorDisciplinas[index][field] = value;
+  }
+  state.simulatorDisciplinas[index].situacao = 'Cursando';
+  state.simulatorDisciplinas[index].conferGrau = true;
+  updateSimulatorResults();
+}
+
+function removeDisciplinaRow(index) {
+  state.simulatorDisciplinas.splice(index, 1);
+  renderSimulatorTable();
+  updateSimulatorResults();
+}
+
+function renderDisciplinaRow(disciplina, index) {
   return el('tr', {}, [
     el('td', {}, [
       el('input', {
         type: 'text',
         value: disciplina.codigo || '',
         placeholder: 'Código',
-        oninput: (e) => updateField('codigo', e.target.value),
+        oninput: (e) => updateDisciplinaField(index, 'codigo', e.target.value),
       }),
     ]),
     el('td', {}, [
@@ -447,7 +461,7 @@ function renderDisciplinaRow(disciplina, index, disciplinas, onChange) {
         type: 'text',
         value: disciplina.nome || '',
         placeholder: 'Nome da disciplina',
-        oninput: (e) => updateField('nome', e.target.value),
+        oninput: (e) => updateDisciplinaField(index, 'nome', e.target.value),
       }),
     ]),
     el('td', {}, [
@@ -455,7 +469,7 @@ function renderDisciplinaRow(disciplina, index, disciplinas, onChange) {
         type: 'text',
         value: disciplina.crR || '',
         placeholder: 'CrR',
-        oninput: (e) => updateField('crR', e.target.value),
+        oninput: (e) => updateDisciplinaField(index, 'crR', e.target.value),
       }),
     ]),
     el('td', {}, [
@@ -463,13 +477,13 @@ function renderDisciplinaRow(disciplina, index, disciplinas, onChange) {
         type: 'text',
         value: disciplina.grau || '',
         placeholder: 'Nota',
-        oninput: (e) => updateField('grau', e.target.value),
+        oninput: (e) => updateDisciplinaField(index, 'grau', e.target.value),
       }),
     ]),
     el('td', {}, [
       el(
         'button',
-        { className: 'btn btn-danger', type: 'button', onclick: removeRow },
+        { className: 'btn btn-danger', type: 'button', onclick: () => removeDisciplinaRow(index) },
         [el('i', { className: 'bi bi-trash' })]
       ),
     ]),
@@ -486,21 +500,54 @@ function addSimulatorRow(container) {
     situacao: 'Cursando',
     conferGrau: true,
   });
-  renderSimulator(container);
+  renderSimulatorTable();
+  updateSimulatorResults();
+  // Foca o primeiro input da última linha adicionada.
+  const lastRow = simulatorTableBody?.lastElementChild;
+  lastRow?.querySelector('input')?.focus();
+}
+
+function updateSimulatorResults() {
+  if (!simulatorResultEls) return;
+
+  const baseResumo = getBaseResumo();
+  const crPeriodo = calcularCRDisciplinas(state.simulatorDisciplinas).crCalculado;
+  const novoCR = calcularCRAcumulado(state.historyData || {}, state.simulatorDisciplinas);
+  const impacto = calcularImpactoCR(baseResumo.crCalculado, novoCR.crCalculado);
+
+  simulatorResultEls.crPeriodo.textContent = formatNumberBR(crPeriodo, 3);
+  simulatorResultEls.novoCR.textContent = formatNumberBR(novoCR.crCalculado, 3);
+  simulatorResultEls.impacto.textContent = `${impacto.absoluto >= 0 ? '+' : ''}${formatNumberBR(
+    impacto.absoluto,
+    3
+  )} (${formatNumberBR(impacto.percentual, 2)}%)`;
+
+  updateMetaReversaResult();
 }
 
 async function importBOAForSimulator(container) {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.pdf,application/pdf';
+  input.style.display = 'none';
+  document.body.appendChild(input);
 
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
-    if (!file) return;
+    if (!file) {
+      cleanupInput(input);
+      return;
+    }
     try {
       const arrayBuffer = await file.arrayBuffer();
       const { obrigatorias } = await processarBOA(arrayBuffer);
       const pendentes = obrigatorias.filter((d) => d.status === 'pendente' || d.status === 'cursando');
+
+      if (pendentes.length === 0) {
+        alert('Nenhuma disciplina pendente encontrada no BOA.');
+        cleanupInput(input);
+        return;
+      }
 
       pendentes.forEach((d) => {
         state.simulatorDisciplinas.push({
@@ -514,55 +561,72 @@ async function importBOAForSimulator(container) {
         });
       });
 
-      renderSimulator(container);
+      renderSimulatorTable();
+      updateSimulatorResults();
     } catch (err) {
+      console.error('Erro ao importar pendências do BOA:', err);
       alert('Erro ao processar BOA: ' + err.message);
+    } finally {
+      cleanupInput(input);
     }
   });
 
   input.click();
 }
 
-function renderMetaReversa(baseResumo, disciplinasPreenchidas) {
-  const crAlvoInput = el('input', { type: 'text', value: '7,0' });
-  const crRRestantesInput = el('input', { type: 'text', value: '0' });
-  const resultEl = el('p', { className: 'text-muted' }, 'Preencha os campos para calcular a média necessária.');
+function cleanupInput(input) {
+  try {
+    document.body.removeChild(input);
+  } catch {}
+}
 
-  const calcular = () => {
-    const crAlvo = parseNumberBR(crAlvoInput.value);
-    const crRRestantes = parseNumberBR(crRRestantesInput.value);
-    if (isNaN(crAlvo)) return;
+let metaReversaState = null;
 
-    const media = calcularMetaReversa(crAlvo, state.historyData, disciplinasPreenchidas, [
-      { crR: crRRestantes },
-    ]);
-
-    if (media === null) {
-      resultEl.textContent = 'Adicione créditos restantes para calcular a meta.';
-      return;
-    }
-
-    if (media < 0) {
-      resultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (já está acima do CR alvo com as notas atuais).`;
-    } else if (media > 10) {
-      resultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (impossível atingir com apenas nota 10).`;
-    } else {
-      resultEl.textContent = `Nota necessária nas disciplinas restantes: ${formatNumberBR(media, 3)}`;
-    }
+function renderMetaReversa() {
+  metaReversaState = {
+    crAlvoInput: el('input', { type: 'text', value: '7,0' }),
+    crRRestantesInput: el('input', { type: 'text', value: '0' }),
   };
+  metaReversaResultEl = el('p', { className: 'text-muted' }, 'Preencha os campos para calcular a média necessária.');
 
-  crAlvoInput.addEventListener('input', calcular);
-  crRRestantesInput.addEventListener('input', calcular);
+  const calcular = () => updateMetaReversaResult();
+  metaReversaState.crAlvoInput.addEventListener('input', calcular);
+  metaReversaState.crRRestantesInput.addEventListener('input', calcular);
 
   return el('div', { className: 'card' }, [
     el('h4', {}, 'Meta Reversa'),
     el('p', { className: 'text-muted' }, 'Descubra a média necessária nas disciplinas restantes para atingir um CR alvo.'),
     el('div', { className: 'form-row' }, [
-      el('label', {}, ['CR alvo: ', crAlvoInput]),
-      el('label', {}, ['Créditos restantes: ', crRRestantesInput]),
+      el('label', {}, ['CR alvo: ', metaReversaState.crAlvoInput]),
+      el('label', {}, ['Créditos restantes: ', metaReversaState.crRRestantesInput]),
     ]),
-    resultEl,
+    metaReversaResultEl,
   ]);
+}
+
+function updateMetaReversaResult() {
+  if (!metaReversaResultEl || !metaReversaState) return;
+
+  const crAlvo = parseNumberBR(metaReversaState.crAlvoInput.value);
+  const crRRestantes = parseNumberBR(metaReversaState.crRRestantesInput.value);
+  if (Number.isNaN(crAlvo)) return;
+
+  const media = calcularMetaReversa(crAlvo, state.historyData, state.simulatorDisciplinas, [
+    { crR: crRRestantes },
+  ]);
+
+  if (media === null) {
+    metaReversaResultEl.textContent = 'Adicione créditos restantes para calcular a meta.';
+    return;
+  }
+
+  if (media < 0) {
+    metaReversaResultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (já está acima do CR alvo com as notas atuais).`;
+  } else if (media > 10) {
+    metaReversaResultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (impossível atingir com apenas nota 10).`;
+  } else {
+    metaReversaResultEl.textContent = `Nota necessária nas disciplinas restantes: ${formatNumberBR(media, 3)}`;
+  }
 }
 
 /* ============================================================
