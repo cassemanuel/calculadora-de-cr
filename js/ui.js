@@ -71,3 +71,33 @@ export function clearElement(element) {
     element.removeChild(element.firstChild);
   }
 }
+
+/**
+ * Converte uma string numérica no formato brasileiro (vírgula como decimal)
+ * ou internacional (ponto como decimal) para número.
+ * @param {string | number} value
+ * @returns {number}
+ */
+export function parseNumberBR(value) {
+  if (typeof value === 'number') return value;
+  if (!value) return 0;
+  const str = String(value).trim();
+  // Se houver vírgula e ponto, assume que ponto é separador de milhar
+  const normalized = str.includes(',') ? str.replace(/\./g, '').replace(',', '.') : str;
+  const parsed = parseFloat(normalized);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Formata um número no padrão brasileiro (vírgula como separador decimal).
+ * @param {number} value
+ * @param {number} [decimals=1]
+ * @returns {string}
+ */
+export function formatNumberBR(value, decimals = 1) {
+  if (value === null || value === undefined || isNaN(value)) return '0,0'.padEnd(decimals + 2, '0');
+  return Number(value).toLocaleString('pt-BR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}

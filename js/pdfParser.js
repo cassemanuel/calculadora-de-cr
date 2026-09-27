@@ -124,9 +124,9 @@ export function parseMetadata(lines) {
     }
 
     if (!metadata.curso) {
-      const cursoMatch = line.match(/(\d+\s+-\s+(?:Bacharelado\s+em\s+)?Ciência\s+da\s+Computação)/i);
+      const cursoMatch = line.match(/(\d+\s+-\s+.+)/);
       if (cursoMatch) {
-        metadata.curso = cursoMatch[1];
+        metadata.curso = cursoMatch[1].trim();
         continue;
       }
     }
@@ -143,6 +143,12 @@ export function parseMetadata(lines) {
       const emissaoMatch = line.match(/Brasileiro\s+Nato\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})/i);
       if (emissaoMatch) {
         metadata.emissao = emissaoMatch[1];
+        continue;
+      }
+      // Fallback genérico: data/hora isolada no formato do SIGA.
+      const fallbackEmissao = line.match(/\b(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})\b/);
+      if (fallbackEmissao && line.length < 80) {
+        metadata.emissao = fallbackEmissao[1];
         continue;
       }
     }

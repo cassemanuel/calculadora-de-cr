@@ -14,7 +14,7 @@ import {
   calcularMetaReversa,
   calcularImpactoCR,
 } from './calculator.js';
-import { el, badgeClassForSituacao, clearElement } from './ui.js';
+import { el, badgeClassForSituacao, clearElement, parseNumberBR, formatNumberBR } from './ui.js';
 
 // Estado global da aplicação.
 const state = {
@@ -42,9 +42,9 @@ function init() {
 function configurePdfWorker() {
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   } else {
-    console.warn('pdfjs-dist não carregado. O upload de PDF não funcionará.');
+    console.warn('pdf.js não carregado. O upload de PDF não funcionará.');
   }
 }
 
@@ -253,9 +253,12 @@ function renderMetadataCard(metadata) {
 function renderResumoCard(resumo) {
   return el('div', { className: 'card' }, [
     el('h3', {}, 'Resumo do CR'),
-    el('p', {}, [el('strong', {}, 'Créditos com grau: '), resumo.crRComGrau?.toFixed(1) ?? '-']),
-    el('p', {}, [el('strong', {}, 'Pontos totais: '), resumo.pontosTotais?.toFixed(1) ?? '-']),
-    el('p', {}, [el('strong', {}, 'CR calculado: '), resumo.crCalculado?.toFixed(3) ?? '-']),
+    el('p', {}, [
+      el('strong', {}, 'Créditos com grau: '),
+      formatNumberBR(resumo.crRComGrau, 1),
+    ]),
+    el('p', {}, [el('strong', {}, 'Pontos totais: '), formatNumberBR(resumo.pontosTotais, 1)]),
+    el('p', {}, [el('strong', {}, 'CR calculado: '), formatNumberBR(resumo.crCalculado, 3)]),
   ]);
 }
 
@@ -266,7 +269,7 @@ function renderPeriodo(periodo) {
     el(
       'span',
       {},
-      `CR: ${crPeriodo.crCalculado.toFixed(3)} — ${periodo.disciplinas.length} disciplinas`
+      `CR: ${formatNumberBR(crPeriodo.crCalculado, 3)} — ${periodo.disciplinas.length} disciplinas`
     ),
   ]);
 
@@ -289,10 +292,10 @@ function renderPeriodo(periodo) {
         el('tr', { className: d.conferGrau ? '' : 'row-muted' }, [
           el('td', {}, d.codigo),
           el('td', {}, d.nome),
-          el('td', {}, d.ch?.toString?.() ?? '-'),
-          el('td', {}, d.crR?.toString?.() ?? '-'),
-          el('td', {}, d.grau?.toString?.() ?? '-'),
-          el('td', {}, d.pontos?.toString?.() ?? '-'),
+          el('td', {}, formatNumberBR(d.ch, 0)),
+          el('td', {}, formatNumberBR(d.crR, 1)),
+          el('td', {}, formatNumberBR(d.grau, 1)),
+          el('td', {}, formatNumberBR(d.pontos, 1)),
           el('td', {}, [
             el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` }, d.situacao),
           ]),
@@ -337,15 +340,22 @@ function renderSimulator(container) {
   const resumo = el('div', { className: 'cards-grid' }, [
     el('div', { className: 'card' }, [
       el('h4', {}, 'CR do Período'),
-      el('p', {}, calcularCRDisciplinas(state.simulatorDisciplinas).crCalculado.toFixed(3)),
+      el('p', {}, formatNumberBR(calcularCRDisciplinas(state.simulatorDisciplinas).crCalculado, 3)),
     ]),
     el('div', { className: 'card' }, [
       el('h4', {}, 'Novo CR Acumulado'),
-      el('p', {}, novoCR.crCalculado.toFixed(3)),
+      el('p', {}, formatNumberBR(novoCR.crCalculado, 3)),
     ]),
     el('div', { className: 'card' }, [
       el('h4', {}, 'Impacto no CR'),
-      el('p', {}, `${impacto.absoluto >= 0 ? '+' : ''}${impacto.absoluto.toFixed(3)} (${impacto.percentual.toFixed(2)}%)`),
+      el(
+        'p',
+        {},
+        `${impacto.absoluto >= 0 ? '+' : ''}${formatNumberBR(impacto.absoluto, 3)} (${formatNumberBR(
+          impacto.percentual,
+          2
+        )}%)`
+      ),
     ]),
   ]);
 
@@ -402,13 +412,8 @@ function renderDisciplinaRow(disciplina, index, disciplinas, onChange) {
   const updateField = (field, value) => {
     const updated = [...disciplinas];
     if (field === 'crR' || field === 'grau') {
-      updated[index][field] = value === '' ? 0 : parseFloat(value);
-      if (field === 'grau') {
-        updated[index].pontos = updated[index].grau * updated[index].crR;
-      }
-      if (field === 'crR') {
-        updated[index].pontos = updated[index].grau * updated[index].crR;
-      }
+      updated[index][field] = parseNumberBR(value);
+      updated[index].pontos = updated[index].grau * updated[index].crR;
     } else {
       updated[index][field] = value;
     }
@@ -441,21 +446,16 @@ function renderDisciplinaRow(disciplina, index, disciplinas, onChange) {
     ]),
     el('td', {}, [
       el('input', {
-        type: 'number',
+        type: 'text',
         value: disciplina.crR || '',
-        min: 0,
-        step: 0.5,
         placeholder: 'CrR',
         oninput: (e) => updateField('crR', e.target.value),
       }),
     ]),
     el('td', {}, [
       el('input', {
-        type: 'number',
+        type: 'text',
         value: disciplina.grau || '',
-        min: 0,
-        max: 10,
-        step: 0.1,
         placeholder: 'Nota',
         oninput: (e) => updateField('grau', e.target.value),
       }),
@@ -518,13 +518,13 @@ async function importBOAForSimulator(container) {
 }
 
 function renderMetaReversa(baseResumo, disciplinasPreenchidas) {
-  const crAlvoInput = el('input', { type: 'number', min: 0, max: 10, step: 0.001, value: '7.0' });
-  const crRRestantesInput = el('input', { type: 'number', min: 0, step: 0.5, value: '0' });
+  const crAlvoInput = el('input', { type: 'text', value: '7,0' });
+  const crRRestantesInput = el('input', { type: 'text', value: '0' });
   const resultEl = el('p', { className: 'text-muted' }, 'Preencha os campos para calcular a média necessária.');
 
   const calcular = () => {
-    const crAlvo = parseFloat(crAlvoInput.value);
-    const crRRestantes = parseFloat(crRRestantesInput.value);
+    const crAlvo = parseNumberBR(crAlvoInput.value);
+    const crRRestantes = parseNumberBR(crRRestantesInput.value);
     if (isNaN(crAlvo)) return;
 
     const media = calcularMetaReversa(crAlvo, state.historyData, disciplinasPreenchidas, [
@@ -537,11 +537,11 @@ function renderMetaReversa(baseResumo, disciplinasPreenchidas) {
     }
 
     if (media < 0) {
-      resultEl.textContent = `Nota necessária: ${media.toFixed(3)} (já está acima do CR alvo com as notas atuais).`;
+      resultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (já está acima do CR alvo com as notas atuais).`;
     } else if (media > 10) {
-      resultEl.textContent = `Nota necessária: ${media.toFixed(3)} (impossível atingir com apenas nota 10).`;
+      resultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (impossível atingir com apenas nota 10).`;
     } else {
-      resultEl.textContent = `Nota necessária nas disciplinas restantes: ${media.toFixed(3)}`;
+      resultEl.textContent = `Nota necessária nas disciplinas restantes: ${formatNumberBR(media, 3)}`;
     }
   };
 
@@ -567,9 +567,9 @@ function initQuickCalculator() {
   const container = document.getElementById('quick-calculator-content');
   if (!container) return;
 
-  const crAtualInput = el('input', { type: 'number', min: 0, max: 10, step: 0.001, value: '' });
-  const crRAtualInput = el('input', { type: 'number', min: 0, step: 0.5, value: '' });
-  const pontosAtuaisInput = el('input', { type: 'number', min: 0, step: 0.1, value: '' });
+  const crAtualInput = el('input', { type: 'text', value: '' });
+  const crRAtualInput = el('input', { type: 'text', value: '' });
+  const pontosAtuaisInput = el('input', { type: 'text', value: '' });
   const useCRRadio = el('input', { type: 'radio', name: 'base-mode', value: 'cr', checked: true });
   const usePontosRadio = el('input', { type: 'radio', name: 'base-mode', value: 'pontos' });
 
@@ -583,11 +583,11 @@ function initQuickCalculator() {
     let pontosBase = 0;
 
     if (usePontosRadio.checked) {
-      crRBase = parseFloat(crRAtualInput.value) || 0;
-      pontosBase = parseFloat(pontosAtuaisInput.value) || 0;
+      crRBase = parseNumberBR(crRAtualInput.value);
+      pontosBase = parseNumberBR(pontosAtuaisInput.value);
     } else {
-      const cr = parseFloat(crAtualInput.value) || 0;
-      const crR = parseFloat(crRAtualInput.value) || 0;
+      const cr = parseNumberBR(crAtualInput.value);
+      const crR = parseNumberBR(crRAtualInput.value);
       crRBase = crR;
       pontosBase = cr * crR;
     }
@@ -603,22 +603,25 @@ function initQuickCalculator() {
       el('div', { className: 'cards-grid' }, [
         el('div', { className: 'card' }, [
           el('h4', {}, 'CR Atual'),
-          el('p', {}, crRBase ? (pontosBase / crRBase).toFixed(3) : '-'),
+          el('p', {}, crRBase ? formatNumberBR(pontosBase / crRBase, 3) : '-'),
         ]),
         el('div', { className: 'card' }, [
           el('h4', {}, 'CR do Período'),
-          el('p', {}, crPeriodo.toFixed(3)),
+          el('p', {}, formatNumberBR(crPeriodo, 3)),
         ]),
         el('div', { className: 'card' }, [
           el('h4', {}, 'Novo CR'),
-          el('p', {}, crNovo.toFixed(3)),
+          el('p', {}, formatNumberBR(crNovo, 3)),
         ]),
         el('div', { className: 'card' }, [
           el('h4', {}, 'Impacto'),
           el(
             'p',
             {},
-            `${impacto.absoluto >= 0 ? '+' : ''}${impacto.absoluto.toFixed(3)} (${impacto.percentual.toFixed(2)}%)`
+            `${impacto.absoluto >= 0 ? '+' : ''}${formatNumberBR(impacto.absoluto, 3)} (${formatNumberBR(
+              impacto.percentual,
+              2
+            )}%)`
           ),
         ]),
       ])
