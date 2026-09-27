@@ -370,6 +370,21 @@ a:hover {
   box-shadow: var(--shadow-md);
 }
 
+.card-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  border-color: var(--status-reprovado);
+  background-color: var(--status-reprovado-bg);
+  margin-bottom: var(--spacing-md);
+}
+
+.card-aviso .card-aviso-texto {
+  margin: 0;
+  color: var(--status-reprovado);
+  font-size: 0.9rem;
+}
+
 /* ----- Dropzone ----- */
 .dropzone {
   position: relative;

@@ -167,11 +167,20 @@ export function parseMetadata(lines) {
     curso: null,
     ingresso: null,
     emissao: null,
+    tipoDocumento: null,
   };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const nextLine = lines[i + 1] || '';
+
+    if (!metadata.tipoDocumento) {
+      if (/HIST[ÓO]RICO\s+N[ÃA]O\s+OFICIAL/i.test(line)) {
+        metadata.tipoDocumento = 'historico';
+      } else if (/BOLETIM\s+N[ÃA]O\s+OFICIAL/i.test(line)) {
+        metadata.tipoDocumento = 'boletim';
+      }
+    }
 
     if (!metadata.nome) {
       // Tenta capturar o nome logo depois de "Nome Civil".

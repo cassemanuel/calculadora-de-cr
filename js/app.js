@@ -259,9 +259,22 @@ function renderReport(container, data) {
 
   const { metadata, periodos, resumo } = data;
 
+  if (metadata?.tipoDocumento === 'historico') {
+    container.appendChild(
+      el('div', { className: 'card card-aviso' }, [
+        el('span', { className: 'badge badge-reprovado' }, 'Atenção'),
+        el('p', { className: 'card-aviso-texto' },
+          'O Histórico Escolar da UFRJ omite reprovações. Se você possui reprovações anteriores ' +
+          '(RM/RF/RFM), o CR calculado aqui será diferente do oficial. Para obter o CR exato com ' +
+          'reprovações computadas, envie o Boletim Não Oficial.'
+        ),
+      ])
+    );
+  }
+
   const headerCards = el('div', { className: 'cards-grid' }, [
     renderMetadataCard(metadata),
-    renderResumoCard(resumo),
+    renderResumoCard(resumo, metadata),
   ]);
   container.appendChild(headerCards);
 
@@ -312,11 +325,18 @@ function renderMetadataCard(metadata) {
   return el('div', { className: 'card' }, [el('h3', {}, 'Dados do Aluno'), ...items]);
 }
 
-function renderResumoCard(resumo) {
+function renderResumoCard(resumo, metadata) {
+  const avisoHistorico = metadata?.tipoDocumento === 'historico'
+    ? el('div', { className: 'cr-label' }, [
+        el('span', { className: 'badge badge-reprovado' }, 'histórico: sem reprovações'),
+      ])
+    : null;
+
   return el('div', { className: 'card cr-dashboard' }, [
     el('h3', {}, 'Resumo do CR'),
     el('div', { className: 'cr-value' }, formatNumberBR(resumo.crCalculado, 3)),
     el('div', { className: 'cr-label' }, 'CR calculado'),
+    avisoHistorico,
     el('div', { className: 'cr-details' }, [
       el('div', { className: 'cr-detail' }, [
         el('span', { className: 'cr-detail-value' }, formatNumberBR(resumo.crRComGrau, 1)),
@@ -485,16 +505,25 @@ function renderSimulatorTable() {
   });
 }
 
-function updateDisciplinaField(index, field, value) {
+function atualizarCampoDisciplina(disciplina, field, value) {
   if (field === 'crR' || field === 'grau') {
-    state.simulatorDisciplinas[index][field] = parseNumberBR(value);
-    state.simulatorDisciplinas[index].pontos =
-      state.simulatorDisciplinas[index].grau * state.simulatorDisciplinas[index].crR;
+    disciplina[field] = String(value).trim() === '' ? null : parseNumberBR(value);
   } else {
-    state.simulatorDisciplinas[index][field] = value;
+    disciplina[field] = value;
   }
-  state.simulatorDisciplinas[index].situacao = 'Cursando';
-  state.simulatorDisciplinas[index].conferGrau = true;
+
+  const grau = Number(disciplina.grau);
+  const notaValida =
+    disciplina.grau !== null && !isNaN(grau) && grau >= 0 && grau <= 10;
+  disciplina.situacao = notaValida ? (grau >= 5 ? 'AP' : 'RM') : 'Cursando';
+  disciplina.pontos = notaValida ? grau * (Number(disciplina.crR) || 0) : 0;
+  disciplina.conferGrau = notaValida;
+}
+
+function updateDisciplinaField(index, field, value) {
+  const disciplina = state.simulatorDisciplinas[index];
+  if (!disciplina) return;
+  atualizarCampoDisciplina(disciplina, field, value);
   updateSimulatorResults();
 }
 
@@ -552,11 +581,11 @@ function addSimulatorRow(container) {
   state.simulatorDisciplinas.push({
     codigo: '',
     nome: '',
-    crR: 0,
-    grau: 0,
+    crR: null,
+    grau: null,
     pontos: 0,
     situacao: 'Cursando',
-    conferGrau: true,
+    conferGrau: false,
   });
   renderSimulatorTable();
   updateSimulatorResults();
@@ -618,10 +647,10 @@ async function importBOAForSimulator(container) {
           codigo: d.codigo,
           nome: d.nome,
           crR: d.crR,
-          grau: 0,
+          grau: null,
           pontos: 0,
           situacao: 'Cursando',
-          conferGrau: true,
+          conferGrau: false,
         });
       });
 
@@ -762,14 +791,15 @@ function initQuickCalculator() {
     );
   };
 
-  const updateDisciplinas = (updated) => {
-    disciplinas.length = 0;
-    disciplinas.push(...updated);
+  const updateQuickField = (index, field, value) => {
+    const disciplina = disciplinas[index];
+    if (!disciplina) return;
+    atualizarCampoDisciplina(disciplina, field, value);
     renderResult();
   };
 
   const addDisciplina = () => {
-    disciplinas.push({ codigo: '', nome: '', crR: 0, grau: 0, pontos: 0, situacao: 'Cursando', conferGrau: true });
+    disciplinas.push({ codigo: '', nome: '', crR: null, grau: null, pontos: 0, situacao: 'Cursando', conferGrau: false });
     renderTable();
   };
 
@@ -804,7 +834,7 @@ function initQuickCalculator() {
                 type: 'text',
                 value: disciplina.codigo || '',
                 placeholder: 'Código',
-                oninput: (e) => updateDisciplinaField(index, 'codigo', e.target.value),
+                oninput: (e) => updateQuickField(index, 'codigo', e.target.value),
               }),
             ]),
             el('td', {}, [
@@ -812,7 +842,7 @@ function initQuickCalculator() {
                 type: 'text',
                 value: disciplina.nome || '',
                 placeholder: 'Nome da disciplina',
-                oninput: (e) => updateDisciplinaField(index, 'nome', e.target.value),
+                oninput: (e) => updateQuickField(index, 'nome', e.target.value),
               }),
             ]),
             el('td', {}, [
@@ -820,7 +850,7 @@ function initQuickCalculator() {
                 type: 'text',
                 value: disciplina.crR || '',
                 placeholder: 'CrR',
-                oninput: (e) => updateDisciplinaField(index, 'crR', e.target.value),
+                oninput: (e) => updateQuickField(index, 'crR', e.target.value),
               }),
             ]),
             el('td', {}, [
@@ -828,7 +858,7 @@ function initQuickCalculator() {
                 type: 'text',
                 value: disciplina.grau || '',
                 placeholder: 'Nota',
-                oninput: (e) => updateDisciplinaField(index, 'grau', e.target.value),
+                oninput: (e) => updateQuickField(index, 'grau', e.target.value),
               }),
             ]),
             el('td', {}, [
