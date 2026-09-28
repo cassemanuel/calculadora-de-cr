@@ -927,7 +927,7 @@ function renderChartCard(pontos) {
   svg.appendChild(svgEl('polyline', {
     points: toPoints('crAcumulado'),
     fill: 'none',
-    stroke: 'var(--cor-ic1)',
+    stroke: 'var(--chart-acum)',
     'stroke-width': '3',
     class: 'chart-line chart-line-acumulado',
   }));

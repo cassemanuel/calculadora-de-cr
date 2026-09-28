@@ -171,40 +171,38 @@ const CR_MINIMO_ESTAGIO = 6.0;
 const MAX_PERIODOS_INTEGRALIZACAO = 14;
 
 // Disciplinas obrigatórias do ciclo básico: 1º ao 4º período do PPC 2022.
-// Cada item aceita o código vigente ou qualquer equivalente histórico (MAB),
-// conforme a tabela de correspondências curriculares.
+// Cada item aceita o código vigente ou qualquer equivalente histórico (MAB/ICP
+// antigas), conforme a tabela de correspondências curriculares — inclusive as
+// disciplinas da grade de transição (ICP007/ICP008).
 const CICLO_BASICO = [
+  // 1º Período
   { codigo: 'ICP131', nome: 'Programação de Computadores I', aceitos: ['ICP131', 'MAB120'] },
   { codigo: 'ICP132', nome: 'Processos de Software', aceitos: ['ICP132', 'MAB112'] },
-  { codigo: 'ICP133', nome: 'Fund. de Sist. da Computação', aceitos: ['ICP133', 'MAB111', 'MAB245'] },
+  { codigo: 'ICP133', nome: 'Fund. de Sist. da Computação', aceitos: ['ICP133', 'MAB111'] },
   { codigo: 'ICP134', nome: 'Números Inteiros e Criptografia', aceitos: ['ICP134', 'MAB624'] },
-  // ICP135 e ICP145 são exigidas apenas para ingressantes do PPC 2022
-  // (não possuem correspondente na grade antiga — ver CICLO_BASICO_SOMENTE_PPC2022).
-  { codigo: 'ICP135', nome: 'Projeto de Carreira', aceitos: ['ICP135'] },
-  { codigo: 'ICP136', nome: 'Sistemas de Informação', aceitos: ['ICP136'] },
-  { codigo: 'ICP141', nome: 'Programação de Computadores II', aceitos: ['ICP141', 'ICP240', 'MAB120'] },
+  { codigo: 'ICP135', nome: 'Projeto de Carreira', aceitos: ['ICP135', 'ICP007'] },
+  { codigo: 'ICP136', nome: 'Introdução ao Pensamento Dedutivo', aceitos: ['ICP136'] },
+  // 2º Período
+  { codigo: 'ICP141', nome: 'Programação de Computadores II', aceitos: ['ICP141', 'MAB120'] },
   { codigo: 'ICP142', nome: 'Organização de Dados I', aceitos: ['ICP142', 'MAB113'] },
+  { codigo: 'ICP143', nome: 'Projeto Prático', aceitos: ['ICP143', 'MAB245'] },
   { codigo: 'ICP144', nome: 'Matemática Discreta', aceitos: ['ICP144', 'MAB352'] },
-  { codigo: 'ICP145', nome: 'Metodologia Científica', aceitos: ['ICP145'] },
+  { codigo: 'ICP145', nome: 'Habilidades Sociais para o Trabalho', aceitos: ['ICP145', 'ICP008'] },
   { codigo: 'MAE111', nome: 'Cálculo Infinitesimal I', aceitos: ['MAE111'] },
+  // 3º Período
   { codigo: 'ICP115', nome: 'Álgebra Linear Algorítmica', aceitos: ['ICP115', 'MAB115'] },
   { codigo: 'ICP116', nome: 'Estrutura dos Dados', aceitos: ['ICP116', 'MAB116'] },
-  { codigo: 'ICP211', nome: 'Disciplina do ciclo básico (ICP211)', aceitos: ['ICP211', 'ICP353', 'MAB353', 'ICP368', 'MAB368'] },
-  { codigo: 'ICP212', nome: 'Introd. Comp. Numérica', aceitos: ['ICP212', 'ICP238', 'MAB230'] },
-  { codigo: 'ICP213', nome: 'POO - Programação Orientada a Objeto', aceitos: ['ICP213', 'ICP239', 'MAB240'] },
+  { codigo: 'ICP211', nome: 'Introd. a Modelagem de Sistemas', aceitos: ['ICP211', 'ICP237'] },
+  { codigo: 'ICP212', nome: 'Introdução à Computação Numérica', aceitos: ['ICP212', 'ICP238', 'MAB230'] },
+  { codigo: 'ICP213', nome: 'Programação Orientada a Objetos', aceitos: ['ICP213', 'ICP239', 'ICP240', 'MAB240'] },
   { codigo: 'MAE992', nome: 'Cálculo Integral e Diferencial II', aceitos: ['MAE992'] },
+  // 4º Período
   { codigo: 'ICP251', nome: 'Arquitetura de Computadores e SO', aceitos: ['ICP251', 'ICP246', 'MAB355', 'MAB366'] },
-  { codigo: 'ICP252', nome: 'Introdução à Computação Numérica', aceitos: ['ICP252', 'ICP238', 'MAB230'] },
-  { codigo: 'ICP253', nome: 'Tecnologia e Sociedade', aceitos: ['ICP253', 'ICP248', 'MAB230'] },
+  { codigo: 'ICP252', nome: 'Computação Científica e Análise de Dados', aceitos: ['ICP252', 'ICP248', 'MAB230'] },
+  { codigo: 'ICP253', nome: 'Tecnologia e Sociedade', aceitos: ['ICP253', 'ICP354', 'MAB354'] },
   { codigo: 'ICP489', nome: 'Banco de Dados I', aceitos: ['ICP489', 'MAB489'] },
-  { codigo: 'MAD243', nome: 'Estatística e Probabilidade', aceitos: ['MAD243'] },
+  { codigo: 'MAD243', nome: 'Estatística e Probabilidade', aceitos: ['MAD243'] }
 ];
-
-// Disciplinas do ciclo básico exigidas apenas para quem ingressou no PPC 2022
-// (a partir de 2022/1): não possuem correspondente na grade antiga, então
-// alunos de currículos anteriores não devem ser cobrados por elas.
-const CICLO_BASICO_SOMENTE_PPC2022 = new Set(['ICP135', 'ICP145']);
-const ANO_CORTE_PPC2022 = 2022;
 
 /**
  * Verifica se a disciplina do histórico conta como concluída para fins de
@@ -234,17 +232,7 @@ export function verificarElegibilidadeEstagio(historyData) {
       .map((d) => String(d.codigo || '').trim().toUpperCase())
   );
 
-  // ICP135/ICP145 só são exigidas de ingressantes do PPC 2022.
-  const ingressoAno = parseInt(
-    String(historyData?.metadata?.ingresso || '').match(/^\d{4}/)?.[0],
-    10
-  );
-  const curriculoNovo = !isNaN(ingressoAno) && ingressoAno >= ANO_CORTE_PPC2022;
-  const requisitos = CICLO_BASICO.filter(
-    (req) => curriculoNovo || !CICLO_BASICO_SOMENTE_PPC2022.has(req.codigo)
-  );
-
-  const faltantes = requisitos.filter(
+  const faltantes = CICLO_BASICO.filter(
     (req) => !req.aceitos.some((cod) => codigosConcluidos.has(cod))
   );
 
