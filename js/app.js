@@ -10,21 +10,16 @@ import {
   importJSON,
 } from './storage.js';
 import { processarPDF } from './pdfParser.js';
-import { processarBOA } from './boaParser.js';
 import { calcularMetricasPorEixo, verificarElegibilidadeEstagio } from './eixos.js';
 import { initPlanner, refreshPlanner, getPlannerData } from './planner.js';
 import {
   calcularCRAcumulado,
-  calcularCRDisciplinas,
-  calcularMetaReversa,
-  calcularImpactoCR,
   disciplinaConferGrau,
 } from './calculator.js';
 import {
   el,
   badgeClassForSituacao,
   clearElement,
-  parseNumberBR,
   formatNumberBR,
   validatePdfFile,
 } from './ui.js';
@@ -32,7 +27,6 @@ import {
 // Estado global da aplicação.
 const state = {
   historyData: null,
-  simulatorDisciplinas: [],
 };
 
 function init() {
@@ -41,7 +35,6 @@ function init() {
   initTabs();
   initDropzone();
   initDataActions();
-  initSimulator();
   initPlanner(() => state.historyData);
   initChartResize();
 
@@ -273,10 +266,8 @@ function initDataActions() {
       clearHistory();
       clearPlanner();
       state.historyData = null;
-      state.simulatorDisciplinas = [];
       clearElement(report);
       report?.classList.add('hidden');
-      initSimulator();
       refreshPlanner();
       alert('Dados salvos apagados.');
     }
@@ -314,9 +305,30 @@ function renderReport(container, data) {
   container.appendChild(headerCards);
 
   if (periodos?.length) {
+    const btnExpandir = el(
+      'button',
+      { className: 'btn btn-secondary', type: 'button' },
+      'Expandir Tudo'
+    );
     const periodosSection = el('section', { className: 'periodos-list' }, [
-      el('h3', {}, 'Disciplinas por Período'),
+      el('div', { className: 'periodos-header' }, [
+        el('h3', {}, 'Disciplinas por Período'),
+        btnExpandir,
+      ]),
     ]);
+
+    btnExpandir.addEventListener('click', () => {
+      const bodies = periodosSection.querySelectorAll('.periodo-body');
+      const todosAbertos = [...bodies].every((b) => !b.classList.contains('hidden'));
+      bodies.forEach((b) => {
+        b.classList.toggle('hidden', todosAbertos);
+        const header = b.previousElementSibling;
+        if (header?.getAttribute('aria-expanded') !== null) {
+          header?.setAttribute('aria-expanded', String(!todosAbertos));
+        }
+      });
+      btnExpandir.textContent = todosAbertos ? 'Expandir Tudo' : 'Recolher Tudo';
+    });
 
     periodos.forEach((periodo, index) => {
       const periodosAteAqui = periodos.slice(0, index + 1);
@@ -442,330 +454,6 @@ function renderPeriodo(periodo, crAcumuladoAteAqui) {
   });
 
   return el('div', { className: 'card periodo-card' }, [header, body]);
-}
-
-/* ============================================================
-   Simulador de Período Atual
-   ============================================================ */
-
-// Referências aos elementos de resultado do simulador para atualização sem re-render.
-let simulatorResultEls = null;
-let metaReversaResultEl = null;
-let simulatorTableBody = null;
-
-function initSimulator() {
-  const container = document.getElementById('pdf-simulator-content');
-  if (!container) return;
-
-  renderSimulatorUI(container);
-  updateSimulatorResults();
-}
-
-function getBaseResumo() {
-  return state.historyData?.resumo || { crRComGrau: 0, pontosTotais: 0, crCalculado: 0 };
-}
-
-function renderSimulatorUI(container) {
-  clearElement(container);
-  simulatorResultEls = {};
-  metaReversaResultEl = null;
-  simulatorTableBody = null;
-
-  const actions = el('div', { className: 'actions-row' }, [
-    el(
-      'button',
-      { className: 'btn btn-primary', type: 'button', onclick: () => addSimulatorRow(container) },
-      [el('i', { className: 'bi bi-plus-lg' }), ' Adicionar disciplina']
-    ),
-    el(
-      'button',
-      { className: 'btn btn-secondary', type: 'button', onclick: () => importBOAForSimulator(container) },
-      [el('i', { className: 'bi bi-file-earmark-pdf' }), ' Importar pendências do BOA']
-    ),
-    el(
-      'button',
-      { className: 'btn btn-danger', type: 'button', onclick: () => { state.simulatorDisciplinas = []; renderSimulatorUI(container); updateSimulatorResults(); } },
-      [el('i', { className: 'bi bi-trash' }), ' Limpar']
-    ),
-  ]);
-
-  const table = el('table', {}, [
-    el('caption', {}, 'Disciplinas do período em simulação'),
-    el('thead', {}, [
-      el('tr', {}, [
-        el('th', { scope: 'col' }, 'Código'),
-        el('th', { scope: 'col' }, 'Nome'),
-        el('th', { scope: 'col' }, 'CrR'),
-        el('th', { scope: 'col' }, 'Nota prevista'),
-        el('th', { scope: 'col' }, 'Ações'),
-      ]),
-    ]),
-    el('tbody', {}),
-  ]);
-  simulatorTableBody = table.querySelector('tbody');
-  renderSimulatorTable();
-
-  const tableContainer = el('div', { className: 'table-container' }, [table]);
-
-  const resumo = el('div', { className: 'cards-grid' }, [
-    el('div', { className: 'card' }, [
-      el('h4', {}, 'CR do Período'),
-      (simulatorResultEls.crPeriodo = el('p', {})),
-    ]),
-    el('div', { className: 'card' }, [
-      el('h4', {}, 'Novo CR Acumulado'),
-      (simulatorResultEls.novoCR = el('p', {})),
-    ]),
-    el('div', { className: 'card' }, [
-      el('h4', {}, 'Impacto no CR'),
-      (simulatorResultEls.impacto = el('p', {})),
-    ]),
-  ]);
-
-  const metaSection = renderMetaReversa();
-
-  container.appendChild(actions);
-  container.appendChild(tableContainer);
-  container.appendChild(resumo);
-  container.appendChild(metaSection);
-}
-
-function renderSimulatorTable() {
-  if (!simulatorTableBody) return;
-  clearElement(simulatorTableBody);
-
-  if (!state.simulatorDisciplinas.length) {
-    simulatorTableBody.appendChild(
-      el('tr', {}, [el('td', { colspan: 5, className: 'text-muted' }, 'Nenhuma disciplina adicionada.')])
-    );
-    return;
-  }
-
-  state.simulatorDisciplinas.forEach((disciplina, index) => {
-    simulatorTableBody.appendChild(renderDisciplinaRow(disciplina, index));
-  });
-}
-
-function atualizarCampoDisciplina(disciplina, field, value) {
-  if (field === 'crR' || field === 'grau') {
-    disciplina[field] = String(value).trim() === '' ? null : parseNumberBR(value);
-  } else {
-    disciplina[field] = value;
-  }
-
-  const grau = Number(disciplina.grau);
-  const notaValida =
-    disciplina.grau !== null && !isNaN(grau) && grau >= 0 && grau <= 10;
-  disciplina.situacao = notaValida ? (grau >= 5 ? 'AP' : 'RM') : 'Cursando';
-  disciplina.pontos = notaValida ? grau * (Number(disciplina.crR) || 0) : 0;
-  disciplina.conferGrau = notaValida;
-}
-
-function updateDisciplinaField(index, field, value) {
-  const disciplina = state.simulatorDisciplinas[index];
-  if (!disciplina) return;
-  atualizarCampoDisciplina(disciplina, field, value);
-  updateSimulatorResults();
-}
-
-function removeDisciplinaRow(index) {
-  state.simulatorDisciplinas.splice(index, 1);
-  renderSimulatorTable();
-  updateSimulatorResults();
-}
-
-function renderDisciplinaRow(disciplina, index) {
-  return el('tr', {}, [
-    el('td', {}, [
-      el('input', {
-        type: 'text',
-        value: disciplina.codigo || '',
-        placeholder: 'Código',
-        oninput: (e) => updateDisciplinaField(index, 'codigo', e.target.value),
-      }),
-    ]),
-    el('td', {}, [
-      el('input', {
-        type: 'text',
-        value: disciplina.nome || '',
-        placeholder: 'Nome da disciplina',
-        oninput: (e) => updateDisciplinaField(index, 'nome', e.target.value),
-      }),
-    ]),
-    el('td', {}, [
-      el('input', {
-        type: 'text',
-        value: disciplina.crR || '',
-        placeholder: 'CrR',
-        oninput: (e) => updateDisciplinaField(index, 'crR', e.target.value),
-      }),
-    ]),
-    el('td', {}, [
-      el('input', {
-        type: 'text',
-        value: disciplina.grau || '',
-        placeholder: 'Nota',
-        oninput: (e) => updateDisciplinaField(index, 'grau', e.target.value),
-      }),
-    ]),
-    el('td', {}, [
-      el(
-        'button',
-        {
-          className: 'btn btn-danger',
-          type: 'button',
-          'aria-label': `Remover ${disciplina.codigo || `disciplina ${index + 1}`}`,
-          title: 'Remover disciplina',
-          onclick: () => removeDisciplinaRow(index),
-        },
-        [el('i', { className: 'bi bi-trash', 'aria-hidden': 'true' })]
-      ),
-    ]),
-  ]);
-}
-
-function addSimulatorRow(container) {
-  state.simulatorDisciplinas.push({
-    codigo: '',
-    nome: '',
-    crR: null,
-    grau: null,
-    pontos: 0,
-    situacao: 'Cursando',
-    conferGrau: false,
-  });
-  renderSimulatorTable();
-  updateSimulatorResults();
-  // Foca o primeiro input da última linha adicionada.
-  const lastRow = simulatorTableBody?.lastElementChild;
-  lastRow?.querySelector('input')?.focus();
-}
-
-function updateSimulatorResults() {
-  if (!simulatorResultEls) return;
-
-  const baseResumo = getBaseResumo();
-  const crPeriodo = calcularCRDisciplinas(state.simulatorDisciplinas).crCalculado;
-  const novoCR = calcularCRAcumulado(state.historyData || {}, state.simulatorDisciplinas);
-  const impacto = calcularImpactoCR(baseResumo.crCalculado, novoCR.crCalculado);
-
-  simulatorResultEls.crPeriodo.textContent = formatNumberBR(crPeriodo, 3);
-  simulatorResultEls.novoCR.textContent = formatNumberBR(novoCR.crCalculado, 3);
-  simulatorResultEls.impacto.textContent = `${impacto.absoluto >= 0 ? '+' : ''}${formatNumberBR(
-    impacto.absoluto,
-    3
-  )} (${formatNumberBR(impacto.percentual, 2)}%)`;
-
-  updateMetaReversaResult();
-}
-
-async function importBOAForSimulator(container) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.pdf,application/pdf';
-  input.style.display = 'none';
-  document.body.appendChild(input);
-
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (!file) {
-      cleanupInput(input);
-      return;
-    }
-    try {
-      validatePdfFile(file);
-      const arrayBuffer = await file.arrayBuffer();
-      const { obrigatorias, optativas } = await processarBOA(arrayBuffer);
-      const todas = [...obrigatorias, ...optativas];
-      const statusPendentes = ['pendente', 'cursando', 'inscricao_facultada', 'inscricao_vedada', 'a_cursar'];
-      const pendentes = todas.filter(
-        (d) => statusPendentes.includes(d.status) && d.periodoRecomendado != null
-      );
-
-      if (pendentes.length === 0) {
-        alert('Nenhuma disciplina pendente encontrada no BOA.');
-        cleanupInput(input);
-        return;
-      }
-
-      pendentes.forEach((d) => {
-        state.simulatorDisciplinas.push({
-          codigo: d.codigo,
-          nome: d.nome,
-          crR: d.crR,
-          grau: null,
-          pontos: 0,
-          situacao: 'Cursando',
-          conferGrau: false,
-        });
-      });
-
-      renderSimulatorTable();
-      updateSimulatorResults();
-    } catch (err) {
-      console.error('Erro ao importar pendências do BOA:', err);
-      alert('Erro ao processar BOA: ' + err.message);
-    } finally {
-      cleanupInput(input);
-    }
-  });
-
-  input.click();
-}
-
-function cleanupInput(input) {
-  try {
-    document.body.removeChild(input);
-  } catch {}
-}
-
-let metaReversaState = null;
-
-function renderMetaReversa() {
-  metaReversaState = {
-    crAlvoInput: el('input', { type: 'text', value: '7,0' }),
-    crRRestantesInput: el('input', { type: 'text', value: '0' }),
-  };
-  metaReversaResultEl = el('p', { className: 'text-muted' }, 'Preencha os campos para calcular a média necessária.');
-
-  const calcular = () => updateMetaReversaResult();
-  metaReversaState.crAlvoInput.addEventListener('input', calcular);
-  metaReversaState.crRRestantesInput.addEventListener('input', calcular);
-
-  return el('div', { className: 'card' }, [
-    el('h4', {}, 'Meta Reversa'),
-    el('p', { className: 'text-muted' }, 'Descubra a média necessária nas disciplinas restantes para atingir um CR alvo.'),
-    el('div', { className: 'form-row' }, [
-      el('label', {}, ['CR alvo: ', metaReversaState.crAlvoInput]),
-      el('label', {}, ['Créditos restantes: ', metaReversaState.crRRestantesInput]),
-    ]),
-    metaReversaResultEl,
-  ]);
-}
-
-function updateMetaReversaResult() {
-  if (!metaReversaResultEl || !metaReversaState) return;
-
-  const crAlvo = parseNumberBR(metaReversaState.crAlvoInput.value);
-  const crRRestantes = parseNumberBR(metaReversaState.crRRestantesInput.value);
-  if (Number.isNaN(crAlvo)) return;
-
-  const media = calcularMetaReversa(crAlvo, state.historyData, state.simulatorDisciplinas, [
-    { crR: crRRestantes },
-  ]);
-
-  if (media === null) {
-    metaReversaResultEl.textContent = 'Adicione créditos restantes para calcular a meta.';
-    return;
-  }
-
-  if (media < 0) {
-    metaReversaResultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (já está acima do CR alvo com as notas atuais).`;
-  } else if (media > 10) {
-    metaReversaResultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (impossível atingir com apenas nota 10).`;
-  } else {
-    metaReversaResultEl.textContent = `Nota necessária nas disciplinas restantes: ${formatNumberBR(media, 3)}`;
-  }
 }
 
 /* ============================================================

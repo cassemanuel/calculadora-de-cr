@@ -105,12 +105,6 @@
 
       <div id="pdf-report" class="report hidden"></div>
 
-      <section class="simulator" id="pdf-simulator" aria-labelledby="simulator-title">
-        <h3 id="simulator-title">Simulador de Período Atual</h3>
-        <p class="text-muted">Adicione as disciplinas em curso para prever o impacto no CR acumulado.</p>
-        <div id="pdf-simulator-content"></div>
-      </section>
-
       <section class="data-actions" id="data-actions" aria-labelledby="data-actions-title">
         <h3 id="data-actions-title">Dados</h3>
         <div class="actions-row">
@@ -132,11 +126,17 @@
     </section>
 
     <section id="tab-planner" class="tab-panel" aria-labelledby="tab-planner-btn" hidden>
-      <div class="panel-header">
-        <h2>Planejamento até o fim do curso</h2>
-        <p class="text-muted">
-          Distribua suas disciplinas pendentes nos próximos semestres e projete o impacto no CR.
-        </p>
+      <div class="panel-header panel-header-actions">
+        <div>
+          <h2>Planejamento até o fim do curso</h2>
+          <p class="text-muted">
+            Distribua suas disciplinas pendentes nos próximos semestres e projete o impacto no CR.
+          </p>
+        </div>
+        <button id="export-planner" class="btn btn-secondary" type="button">
+          <i class="bi bi-printer" aria-hidden="true"></i>
+          Exportar Planejamento
+        </button>
       </div>
       <div id="planner-content"></div>
     </section>

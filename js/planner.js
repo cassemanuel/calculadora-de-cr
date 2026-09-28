@@ -16,6 +16,7 @@ import { processarBOA } from './boaParser.js';
 import {
   calcularCRAcumulado,
   calcularCRDisciplinas,
+  calcularMetaReversa,
   disciplinaConferGrau,
 } from './calculator.js';
 import { eixoDaDisciplina, EIXOS } from './eixos.js';
@@ -57,6 +58,9 @@ let planner = { banco: [], semestres: [] };
 export function initPlanner(historyGetter) {
   getHistoryData = typeof historyGetter === 'function' ? historyGetter : () => null;
   containerEl = document.getElementById('planner-content');
+  document
+    .getElementById('export-planner')
+    ?.addEventListener('click', exportarPlanejamento);
   refreshPlanner();
 }
 
@@ -111,6 +115,22 @@ function persistir() {
   savePlanner(planner);
 }
 
+/**
+ * Converte uma disciplina do planejador ({codigo, nome, crR, grau}) para o
+ * formato esperado pelo motor de cálculo (situacao/pontos derivados do grau).
+ * @param {object} d
+ * @returns {object}
+ */
+function paraCalculo(d) {
+  const temNota = d.grau != null && !isNaN(Number(d.grau));
+  return {
+    crR: d.crR,
+    grau: d.grau,
+    pontos: temNota ? Number(d.grau) * (Number(d.crR) || 0) : 0,
+    situacao: temNota ? (d.grau >= 5 ? 'AP' : 'RM') : 'Cursando',
+  };
+}
+
 /** Re-renderiza toda a aba do planejador. */
 function renderPlanner() {
   if (!containerEl) return;
@@ -118,6 +138,7 @@ function renderPlanner() {
 
   containerEl.appendChild(renderBanco());
   containerEl.appendChild(renderSemestres());
+  containerEl.appendChild(renderMetaReversa());
 }
 
 /* ============================================================
@@ -352,14 +373,7 @@ function renderSemestres() {
   let crRAcumulado = base.crRComGrau;
 
   const cards = planner.semestres.map((semestre, index) => {
-    const resumo = calcularCRDisciplinas(
-      semestre.disciplinas.map((d) => ({
-        crR: d.crR,
-        grau: d.grau,
-        pontos: d.grau != null ? d.grau * (Number(d.crR) || 0) : 0,
-        situacao: d.grau != null && !isNaN(d.grau) ? (d.grau >= 5 ? 'AP' : 'RM') : 'Cursando',
-      }))
-    );
+    const resumo = calcularCRDisciplinas(semestre.disciplinas.map(paraCalculo));
 
     pontosAcumulados += resumo.pontosTotais;
     crRAcumulado += resumo.crRComGrau;
@@ -496,12 +510,7 @@ function atualizarRodapeSemestre(index) {
 
   for (let i = 0; i <= index; i++) {
     const resumo = calcularCRDisciplinas(
-      planner.semestres[i].disciplinas.map((d) => ({
-        crR: d.crR,
-        grau: d.grau,
-        pontos: d.grau != null ? d.grau * (Number(d.crR) || 0) : 0,
-        situacao: d.grau != null && !isNaN(d.grau) ? (d.grau >= 5 ? 'AP' : 'RM') : 'Cursando',
-      }))
+      planner.semestres[i].disciplinas.map(paraCalculo)
     );
     pontosAcumulados += resumo.pontosTotais;
     crRAcumulado += resumo.crRComGrau;
@@ -522,4 +531,188 @@ function atualizarRodapeSemestre(index) {
         `CR acumulado projetado: ${formatNumberBR(crProjetado, 3)}`));
     }
   }
+}
+
+/* ============================================================
+   Meta Reversa (média necessária nas disciplinas restantes)
+   ============================================================ */
+
+let metaReversaState = null;
+let metaReversaResultEl = null;
+
+/**
+ * Card "Meta Reversa": calcula a média necessária nas disciplinas ainda sem
+ * nota do planejamento para atingir um CR alvo.
+ * @returns {HTMLElement}
+ */
+function renderMetaReversa() {
+  metaReversaState = {
+    crAlvoInput: el('input', { type: 'text', value: '7,0', 'aria-label': 'CR alvo' }),
+  };
+  metaReversaResultEl = el('p', { className: 'text-muted' },
+    'Preencha o CR alvo para calcular a média necessária.');
+
+  metaReversaState.crAlvoInput.addEventListener('input', updateMetaReversaResult);
+
+  const card = el('div', { className: 'card planner-meta' }, [
+    el('h4', {}, 'Meta Reversa'),
+    el('p', { className: 'text-muted' },
+      'Média necessária nas disciplinas pendentes do planejamento para atingir o CR alvo.'),
+    el('div', { className: 'form-row' }, [
+      el('label', {}, ['CR alvo: ', metaReversaState.crAlvoInput]),
+    ]),
+    metaReversaResultEl,
+  ]);
+  updateMetaReversaResult();
+  return card;
+}
+
+/**
+ * Recalcula a meta reversa considerando como "preenchidas" as disciplinas dos
+ * semestres futuros com grau numérico válido, e como "restantes" tudo que está
+ * no banco de pendências somado às disciplinas de semestres sem nota.
+ */
+function updateMetaReversaResult() {
+  if (!metaReversaResultEl || !metaReversaState) return;
+
+  const crAlvo = parseNumberBR(metaReversaState.crAlvoInput.value);
+  if (Number.isNaN(crAlvo)) {
+    metaReversaResultEl.textContent = 'Informe um CR alvo válido.';
+    return;
+  }
+
+  const temNota = (d) => d.grau != null && d.grau !== '' && !isNaN(Number(d.grau));
+  const disciplinasSemestres = planner.semestres.flatMap((s) => s.disciplinas);
+  const disciplinasPreenchidas = disciplinasSemestres.filter(temNota).map(paraCalculo);
+  const disciplinasRestantes = [
+    ...planner.banco,
+    ...disciplinasSemestres.filter((d) => !temNota(d)),
+  ];
+
+  const media = calcularMetaReversa(
+    crAlvo,
+    getHistoryData(),
+    disciplinasPreenchidas,
+    disciplinasRestantes
+  );
+
+  if (media === null) {
+    metaReversaResultEl.textContent = 'Adicione disciplinas ao banco ou aos semestres para calcular a meta.';
+    return;
+  }
+
+  if (media < 0) {
+    metaReversaResultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (já está acima do CR alvo com as notas atuais).`;
+  } else if (media > NOTA_MAXIMA) {
+    metaReversaResultEl.textContent = `Nota necessária: ${formatNumberBR(media, 3)} (impossível atingir com apenas nota 10).`;
+  } else {
+    metaReversaResultEl.textContent = `Nota necessária nas disciplinas restantes: ${formatNumberBR(media, 3)}`;
+  }
+}
+
+/* ============================================================
+   Exportação do planejamento para impressão/PDF
+   ============================================================ */
+
+/**
+ * Escapa caracteres HTML para injeção segura no documento de impressão.
+ * @param {*} valor
+ * @returns {string}
+ */
+function escapeHtml(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Abre uma janela de impressão com o relatório do planejamento: resumo do
+ * aluno (metadados do histórico) e tabela de todas as disciplinas pendentes
+ * (banco + semestres futuros) com semestre alocado e nota prevista.
+ */
+function exportarPlanejamento() {
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('O navegador bloqueou a janela de impressão. Libere pop-ups para exportar.');
+    return;
+  }
+
+  const metadata = getHistoryData()?.metadata || {};
+  const linhas = [
+    ...planner.banco.map((d) => ({ ...d, semestre: 'Não alocado' })),
+    ...planner.semestres.flatMap((s) =>
+      s.disciplinas.map((d) => ({ ...d, semestre: s.rotulo }))
+    ),
+  ];
+
+  const linhasHtml = linhas.length
+    ? linhas
+        .map(
+          (d) => `<tr>
+        <td>${escapeHtml(d.codigo || '—')}</td>
+        <td>${escapeHtml(d.nome || '—')}</td>
+        <td>${escapeHtml(formatNumberBR(d.crR, 0))}</td>
+        <td>${escapeHtml(d.semestre)}</td>
+        <td>${d.grau != null && d.grau !== '' ? escapeHtml(formatNumberBR(d.grau, 1)) : '—'}</td>
+      </tr>`
+        )
+        .join('')
+    : '<tr><td colspan="5">Nenhuma disciplina pendente no planejamento.</td></tr>';
+
+  const docHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Planejamento até o fim do curso — ${escapeHtml(metadata.nome || 'Aluno')}</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/grade-bcc.css" />
+  <style>
+    /* A classe .grade-export-summary é position:absolute no CSS original
+       (overlay do quadro de grade); no documento impresso ela flui normal. */
+    body { background: #ffffff; padding: 24px; }
+    .grade-export-summary { position: static; width: 100%; margin-bottom: 20px; }
+    table { width: 100%; }
+  </style>
+</head>
+<body>
+  <header class="grade-export-title">
+    <h2>Planejamento até o fim do curso</h2>
+  </header>
+  <div class="grade-export-summary">
+    <div class="grade-export-summary-main">
+      <div class="grade-export-summary-id">
+        <h2>${escapeHtml(metadata.nome || 'Aluno')}</h2>
+        <p>${escapeHtml(metadata.curso || 'Ciência da Computação — IC/UFRJ')}</p>
+        <div class="grade-export-summary-tags">
+          ${metadata.dre ? `<span class="dre-tag">DRE ${escapeHtml(metadata.dre)}</span>` : ''}
+          <small>Gerado em ${escapeHtml(new Date().toLocaleDateString('pt-BR'))}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nome</th>
+        <th>Créditos</th>
+        <th>Semestre Alocado</th>
+        <th>Nota Prevista</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${linhasHtml}
+    </tbody>
+  </table>
+  <script>
+    window.onload = () => { window.print(); window.close(); };
+  <\/script>
+</body>
+</html>`;
+
+  win.document.open();
+  win.document.write(docHtml);
+  win.document.close();
 }

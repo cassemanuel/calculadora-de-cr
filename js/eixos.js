@@ -198,7 +198,7 @@ const CICLO_BASICO = [
   { codigo: 'MAE992', nome: 'Cálculo Integral e Diferencial II', aceitos: ['MAE992'] },
   // 4º Período
   { codigo: 'ICP251', nome: 'Arquitetura de Computadores e SO', aceitos: ['ICP251', 'ICP246', 'MAB355', 'MAB366'] },
-  { codigo: 'ICP252', nome: 'Computação Científica e Análise de Dados', aceitos: ['ICP252', 'ICP248', 'MAB230'] },
+  { codigo: 'ICP248', nome: 'Computação Científica e Análise de Dados', aceitos: ['ICP230', 'MAB230'] },
   { codigo: 'ICP253', nome: 'Tecnologia e Sociedade', aceitos: ['ICP253', 'ICP354', 'MAB354'] },
   { codigo: 'ICP489', nome: 'Banco de Dados I', aceitos: ['ICP489', 'MAB489'] },
   { codigo: 'MAD243', nome: 'Estatística e Probabilidade', aceitos: ['MAD243'] }

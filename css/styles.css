@@ -1004,13 +1004,29 @@ select:focus {
   accent-color: var(--cor-ic1);
 }
 
-.simulator {
-  margin-top: 2.5rem;
-}
-
-.simulator .card,
 .data-actions .card {
   margin-top: var(--spacing-md);
+}
+
+/* Cabeçalho da lista de períodos com botão Expandir/Recolher Tudo */
+.periodos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.periodos-header h3 {
+  margin: 0;
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
 }
 
 #analytics-content > .card:first-child {
@@ -1279,6 +1295,10 @@ table .btn {
 
 .planner-semestres-header h3 {
   margin: 0;
+}
+
+.planner-meta {
+  margin-top: 2rem;
 }
 
 .planner-semestres {
