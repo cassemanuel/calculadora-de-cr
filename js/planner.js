@@ -628,9 +628,31 @@ function escapeHtml(valor) {
 }
 
 /**
+ * Monta as linhas de uma tabela do relatório impresso.
+ * @param {Array<object>} disciplinas
+ * @returns {string}
+ */
+function linhasTabelaExport(disciplinas) {
+  if (!disciplinas.length) {
+    return '<tr><td colspan="4">Nenhuma disciplina neste bloco.</td></tr>';
+  }
+  return disciplinas
+    .map(
+      (d) => `<tr>
+        <td>${escapeHtml(d.codigo || '—')}</td>
+        <td>${escapeHtml(d.nome || '—')}</td>
+        <td>${escapeHtml(formatNumberBR(d.crR, 0))}</td>
+        <td>${d.grau != null && d.grau !== '' ? escapeHtml(formatNumberBR(d.grau, 1)) : '—'}</td>
+      </tr>`
+    )
+    .join('');
+}
+
+/**
  * Abre uma janela de impressão com o relatório do planejamento: resumo do
- * aluno (metadados do histórico) e tabela de todas as disciplinas pendentes
- * (banco + semestres futuros) com semestre alocado e nota prevista.
+ * aluno (metadados do histórico) e um bloco por semestre futuro — numerado
+ * pelo ordinal relativo à trajetória (N períodos letivos já cursados) —
+ * seguido do bloco de disciplinas ainda não alocadas do banco de pendências.
  */
 function exportarPlanejamento() {
   const win = window.open('', '_blank');
@@ -640,26 +662,48 @@ function exportarPlanejamento() {
   }
 
   const metadata = getHistoryData()?.metadata || {};
-  const linhas = [
-    ...planner.banco.map((d) => ({ ...d, semestre: 'Não alocado' })),
-    ...planner.semestres.flatMap((s) =>
-      s.disciplinas.map((d) => ({ ...d, semestre: s.rotulo }))
-    ),
-  ];
 
-  const linhasHtml = linhas.length
-    ? linhas
-        .map(
-          (d) => `<tr>
-        <td>${escapeHtml(d.codigo || '—')}</td>
-        <td>${escapeHtml(d.nome || '—')}</td>
-        <td>${escapeHtml(formatNumberBR(d.crR, 0))}</td>
-        <td>${escapeHtml(d.semestre)}</td>
-        <td>${d.grau != null && d.grau !== '' ? escapeHtml(formatNumberBR(d.grau, 1)) : '—'}</td>
-      </tr>`
-        )
-        .join('')
-    : '<tr><td colspan="5">Nenhuma disciplina pendente no planejamento.</td></tr>';
+  // Períodos letivos regulares já cursados (ignora blocos de transferência
+  // como "2023", que não seguem o padrão "AAAA/N").
+  const periodosCursados = (getHistoryData()?.periodos || []).filter((p) =>
+    PERIODO_REGEX.test(String(p.periodo || ''))
+  ).length;
+
+  const creditosDe = (disciplinas) =>
+    disciplinas.reduce((sum, d) => sum + (Number(d.crR) || 0), 0);
+
+  const bloco = (titulo, disciplinas) => `
+  <section class="semestre-bloco">
+    <h3 class="semestre-titulo">${titulo}
+      <span class="semestre-creditos">${escapeHtml(formatNumberBR(creditosDe(disciplinas), 0))} créditos</span>
+    </h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nome</th>
+          <th>Créditos</th>
+          <th>Nota Prevista</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${linhasTabelaExport(disciplinas)}
+      </tbody>
+    </table>
+  </section>`;
+
+  const blocosSemestres = planner.semestres
+    .map((s, i) =>
+      bloco(
+        `${escapeHtml(s.rotulo)} — ${periodosCursados + i + 1}º Período`,
+        s.disciplinas
+      )
+    )
+    .join('');
+
+  const blocoBanco = planner.banco.length
+    ? bloco('Disciplinas Pendentes (Ainda não alocadas)', planner.banco)
+    : '';
 
   const docHtml = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -667,13 +711,111 @@ function exportarPlanejamento() {
   <meta charset="UTF-8" />
   <title>Planejamento até o fim do curso — ${escapeHtml(metadata.nome || 'Aluno')}</title>
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="stylesheet" href="css/grade-bcc.css" />
   <style>
-    /* A classe .grade-export-summary é position:absolute no CSS original
-       (overlay do quadro de grade); no documento impresso ela flui normal. */
-    body { background: #ffffff; padding: 24px; }
-    .grade-export-summary { position: static; width: 100%; margin-bottom: 20px; }
-    table { width: 100%; }
+    body {
+      background: #ffffff;
+      padding: 24px;
+      font-family: "Open Sans", sans-serif;
+      color: #0f172a;
+    }
+    .grade-export-title {
+      margin: 0 auto 20px auto;
+      font-family: "Montserrat", sans-serif;
+      text-align: center;
+    }
+    .grade-export-title h2 {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: #1e293b;
+      text-transform: uppercase;
+    }
+    .grade-export-summary {
+      background: #f8fafc;
+      border: 2px solid #344563;
+      border-radius: 12px;
+      padding: 18px 22px;
+      box-sizing: border-box;
+      font-family: "Montserrat", sans-serif;
+      margin-bottom: 24px;
+    }
+    .grade-export-summary-id h2 {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      font-weight: 800;
+      color: #1e293b;
+    }
+    .grade-export-summary-id p {
+      margin: 0 0 10px 0;
+      font-size: 13px;
+      color: #475569;
+    }
+    .grade-export-summary-tags {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .grade-export-summary-tags small {
+      color: #64748b;
+      font-size: 11px;
+    }
+    .dre-tag {
+      display: inline-block;
+      background: #344563;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+    .semestre-bloco {
+      margin-bottom: 20px;
+    }
+    .semestre-titulo {
+      font-family: "Montserrat", sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: #344563;
+      border-bottom: 2px solid #344563;
+      padding-bottom: 6px;
+      margin: 0 0 8px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+    .semestre-creditos {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 6px 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    th {
+      font-family: "Montserrat", sans-serif;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #475569;
+      border-bottom: 2px solid #cbd5e1;
+    }
+    @media print {
+      .semestre-bloco {
+        page-break-inside: avoid;
+        margin-bottom: 24px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -692,20 +834,8 @@ function exportarPlanejamento() {
       </div>
     </div>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Código</th>
-        <th>Nome</th>
-        <th>Créditos</th>
-        <th>Semestre Alocado</th>
-        <th>Nota Prevista</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${linhasHtml}
-    </tbody>
-  </table>
+  ${blocosSemestres}
+  ${blocoBanco}
   <script>
     window.onload = () => { window.print(); window.close(); };
   <\/script>
