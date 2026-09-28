@@ -654,7 +654,7 @@ function linhasTabelaExport(disciplinas) {
         <td>${escapeHtml(d.codigo || '—')}</td>
         <td>${escapeHtml(d.nome || '—')}</td>
         <td>${escapeHtml(formatNumberBR(d.crR, 0))}</td>
-        <td>${d.grau != null && d.grau !== '' ? escapeHtml(formatNumberBR(d.grau, 1)) : '—'}</td>
+        <td>${escapeHtml(d.requisito || d.requisitos || '—')}</td>
       </tr>`
     )
     .join('');
@@ -686,6 +686,10 @@ function exportarPlanejamento() {
     String(dataAtual.getMinutes()).padStart(2, '0');
   const docTitle = `${primeiroNome}_${dreStr}_${timestamp}`;
 
+  // Remove o código do curso que o SIGA prefixa (ex.: "85783 - Bacharelado...").
+  const cursoLimpo = (metadata.curso || 'Ciência da Computação — IC/UFRJ')
+    .replace(/^\d+\s*-\s*/, '');
+
   // Períodos letivos regulares já cursados (ignora blocos de transferência
   // como "2023", que não seguem o padrão "AAAA/N").
   const periodosCursados = (getHistoryData()?.periodos || []).filter((p) =>
@@ -706,7 +710,7 @@ function exportarPlanejamento() {
           <th>Código</th>
           <th>Nome</th>
           <th>Créditos</th>
-          <th>Nota Prevista</th>
+          <th>Pré-requisitos</th>
         </tr>
       </thead>
       <tbody>
@@ -849,7 +853,7 @@ function exportarPlanejamento() {
     <div class="grade-export-summary-main">
       <div class="grade-export-summary-id">
         <h2>${escapeHtml(metadata.nome || 'Aluno')}</h2>
-        <p>${escapeHtml(metadata.curso || 'Ciência da Computação — IC/UFRJ')}</p>
+        <p>${escapeHtml(cursoLimpo)}</p>
         <div class="grade-export-summary-tags">
           ${metadata.dre ? `<span class="dre-tag">DRE ${escapeHtml(metadata.dre)}</span>` : ''}
           <small>Gerado em ${escapeHtml(new Date().toLocaleDateString('pt-BR'))}</small>
