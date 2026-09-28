@@ -47,40 +47,89 @@ const METAS_ELETIVAS = Object.freeze([
 
 const PERIODO_REGEX = /^(\d{4})\s*\/\s*(\d)$/;
 
-// Mapa de pré-requisitos oficiais por código de disciplina (PPC 2022 e grade
-// histórica). Extraído das tabelas curriculares em docs-pessoais/ — códigos
-// separados por vírgula, sem formatação adicional.
+// Mapa oficial de pré-requisitos por código de disciplina, extraído das
+// tabelas do PPC 2022 do BCC/UFRJ — códigos separados por vírgula.
 const MAPA_REQUISITOS = Object.freeze({
+  // 1º Período (sem pré-requisitos)
+  ICP131: '',
+  ICP132: '',
+  ICP133: '',
+  ICP134: '',
+  ICP135: '',
+  ICP136: '',
+
   // 2º Período
-  'ICP141': 'ICP131',
-  'ICP142': 'ICP131',
-  'ICP143': 'ICP131, ICP132, ICP133',
-  'ICP144': 'ICP136',
+  ICP141: 'ICP131',
+  ICP142: '',
+  ICP143: 'ICP131, ICP132, ICP133',
+  ICP144: 'ICP134',
+  ICP145: 'ICP135',
+  MAE111: '',
+
   // 3º Período
-  'ICP116': 'ICP141',
-  'ICP212': 'ICP131, MAE111',
-  'ICP213': 'ICP141',
-  'MAE992': 'MAE111',
+  ICP115: 'ICP136, ICP144',
+  ICP116: 'ICP141',
+  ICP211: 'ICP132, ICP141',
+  ICP237: 'ICP132, ICP141',
+  ICP212: 'ICP131, ICP133, MAE111',
+  ICP238: 'ICP131, ICP133, MAE111',
+  ICP213: 'ICP141',
+  ICP239: 'ICP141',
+  MAE992: 'MAE111',
+
   // 4º Período
-  'ICP251': 'ICP133',
-  'ICP248': 'ICP115, ICP238, MAE992',
-  'ICP252': 'ICP115, ICP238, MAE992',
-  'ICP489': 'ICP116',
-  'MAD243': 'MAE992',
-  // Disciplinas do tronco e eletivas (conforme grade curricular vigente)
-  'ICP123': 'ICP141, ICP144',
-  'ICP351': 'ICP115, MAE992',
-  'ICP361': 'ICP116',
-  'ICP362': 'ICP131, ICP133, MAD243',
-  'ICP363': 'ICP248, MAD243',
-  'ICP365': 'ICP115, ICP238',
-  'ICP368': 'ICP116, ICP144',
-  'ICP370': 'ICP123',
-  'ICP472': 'ICP249',
-  'ICP473': 'ICP353, ICP362',
-  'ICP622': 'ICP361',
-  'ICPK01': 'ICP472',
-  'FIT122': 'FIT112, MAC118/MAE111',
+  ICP251: 'ICP133, ICP141',
+  ICP246: 'ICP133, ICP141',
+  ICP252: 'ICP115, ICP238, MAE992',
+  ICP248: 'ICP115, ICP238, MAE992',
+  ICP253: 'ICP145',
+  ICP249: 'ICP145',
+  ICP489: 'ICP116',
+  MAD243: 'MAE992',
+
+  // 5º Período
+  ICP123: 'ICP141, ICP144',
+  ICP311: 'ICP115, MAD243',
+  ICP350: 'ICP115, MAD243',
+  ICP312: 'ICP115, MAE992',
+  ICP351: 'ICP115, MAE992',
+  ICP353: 'ICP246',
+  ICP368: 'ICP116, ICP144',
+
+  // 6º Período
+  ICP321: 'ICP239, ICP353',
+  ICP361: 'ICP239, ICP353',
+  ICP322: 'ICP131, ICP133, MAD243',
+  ICP362: 'ICP131, ICP133, MAD243',
+  ICP323: 'ICP248, MAD243',
+  ICP363: 'ICP248, MAD243',
+  ICP325: 'ICP115, ICP238',
+  ICP365: 'ICP115, ICP238',
+  ICP324: 'ICP123',
+  ICP370: 'ICP123',
+
+  // 7º Período
+  ICP411: 'ICP353, ICP362',
+  ICP473: 'ICP353, ICP362',
+  ICP412: 'ICP249',
+  ICP472: 'ICP249',
+
+  // 8º Período
+  ICPK01: 'ICP472',
+
+  // Optativas Condicionadas Frequentes
+  ICP622: 'ICP361',
+  ICP095: '',
+  ICP006: 'ICP246, ICP362',
+  ICP508: 'ICP368',
+  ICP471: 'ICP116, ICP123, ICP353',
+  ICP478: 'ICP238',
+  MAE993: 'MAE992',
+  MAE994: 'ICP115, MAE992',
+  FIT112: '',
+  FIT122: 'FIT112, MAE111',
+  FIM230: 'FIT112, MAE992',
+  FIM240: 'FIM230',
 });
 
 let containerEl = null;
@@ -686,14 +735,16 @@ function linhasTabelaExport(disciplinas) {
     return '<tr><td colspan="4">Nenhuma disciplina neste bloco.</td></tr>';
   }
   return disciplinas
-    .map(
-      (d) => `<tr>
+    .map((d) => {
+      // Fallback: disciplinas salvas antes do mapa consultam MAPA_REQUISITOS.
+      const req = d.requisitos || d.requisito || MAPA_REQUISITOS[String(d.codigo || '').toUpperCase()] || '—';
+      return `<tr>
         <td>${escapeHtml(d.codigo || '—')}</td>
         <td>${escapeHtml(d.nome || '—')}</td>
         <td>${escapeHtml(formatNumberBR(d.crR, 0))}</td>
-        <td>${escapeHtml(d.requisito || d.requisitos || '—')}</td>
-      </tr>`
-    )
+        <td>${escapeHtml(req)}</td>
+      </tr>`;
+    })
     .join('');
 }
 
