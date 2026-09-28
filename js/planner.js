@@ -675,6 +675,17 @@ function exportarPlanejamento() {
 
   const metadata = getHistoryData()?.metadata || {};
 
+  // Nome sugerido para o PDF: PRIMEIRONOME_DRE_YYYYMMDD_HHMM.
+  const primeiroNome = (metadata.nome || 'ALUNO').split(' ')[0].toUpperCase();
+  const dreStr = metadata.dre || 'SEMDRE';
+  const dataAtual = new Date();
+  const timestamp = dataAtual.getFullYear().toString() +
+    String(dataAtual.getMonth() + 1).padStart(2, '0') +
+    String(dataAtual.getDate()).padStart(2, '0') + '_' +
+    String(dataAtual.getHours()).padStart(2, '0') +
+    String(dataAtual.getMinutes()).padStart(2, '0');
+  const docTitle = `${primeiroNome}_${dreStr}_${timestamp}`;
+
   // Períodos letivos regulares já cursados (ignora blocos de transferência
   // como "2023", que não seguem o padrão "AAAA/N").
   const periodosCursados = (getHistoryData()?.periodos || []).filter((p) =>
@@ -721,7 +732,7 @@ function exportarPlanejamento() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Planejamento Pedagógico — ${escapeHtml(metadata.nome || 'Aluno')}</title>
+  <title>${escapeHtml(docTitle)}</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     body {
@@ -845,6 +856,15 @@ function exportarPlanejamento() {
         </div>
       </div>
     </div>
+  </div>
+  <div class="grade-export-disclaimers" style="font-size: 13px; color: #334155; margin-bottom: 24px; line-height: 1.5;">
+    <strong>Planejamento do Curso – Bacharelado em Ciência da Computação</strong>
+    <ol style="margin-top: 8px; padding-left: 24px;">
+      <li>Este planejamento deve incluir todas as disciplinas que faltam para você concluir o curso, indicando em qual período você pretende cursá-las.</li>
+      <li>No caso das disciplinas eletivas, basta você colocar na tabela como “ELETIVA”, não precisa indicar qual é. Quando você cursar mais de uma eletiva em um período, coloque uma linha para cada eletiva.</li>
+      <li>No caso das horas de extensão, indique também qual a carga horária de extensão que você pretende cumprir no período. Por exemplo: “EXTENSÃO – 60 horas” informa que você pretende cumprir 60 horas de extensão em um determinado período.</li>
+      <li>Caso seja necessário, acrescente mais períodos.</li>
+    </ol>
   </div>
   ${blocosSemestres}
   ${blocoBanco}
