@@ -66,7 +66,7 @@ Depois abra o endereço exibido (ex.: `http://localhost:8080` ou `http://localho
 
 | Arquivo | Descrição |
 |---------|-----------|
-| `index.html` | Aplicação principal (SPA) com as três abas: Histórico, Planejamento até o fim do curso e Análise. |
+| `index.html` | Aplicação principal (SPA) com as três abas: Histórico, Planejamento Pedagógico e Análise. |
 | `docs.html` | Documentação detalhada das regras de cálculo, formatos e segurança. |
 | `js/` | Módulos JavaScript: parsers (`pdfParser`, `boaParser`), motor de cálculo (`calculator`), eixos (`eixos`), persistência (`storage`) e UI (`ui`, `app`). |
 | `css/styles.css` | Estilos, identidade visual IC/UFRJ e temas Claro/Escuro. |

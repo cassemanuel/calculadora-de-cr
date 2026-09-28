@@ -1380,6 +1380,10 @@ table .btn {
   color: var(--cor-ic1);
 }
 
+[data-theme="dark"] .planner-cr-projetado {
+  color: var(--cor-ic1-light);
+}
+
 @media (max-width: 640px) {
   .planner-grid {
     grid-template-columns: 1fr;

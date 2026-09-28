@@ -199,6 +199,18 @@ function renderBanco() {
         { className: 'btn btn-secondary' },
         [el('i', { className: 'bi bi-file-earmark-pdf', 'aria-hidden': 'true' }), ' Importar Pendências do BOA', inputBoa]
       ),
+      el('button', {
+        className: 'btn btn-danger',
+        type: 'button',
+        onclick: () => {
+          if (confirm('Deseja limpar todo o planejamento atual (banco e semestres futuros)?')) {
+            planner.banco = [];
+            planner.semestres = [{ rotulo: proximoRotulo(), disciplinas: [] }];
+            persistir();
+            renderPlanner();
+          }
+        },
+      }, [el('i', { className: 'bi bi-trash', 'aria-hidden': 'true' }), ' Limpar Planejamento']),
     ]),
     el('div', { className: 'planner-add-row' }, [
       campoCodigo,
@@ -709,7 +721,7 @@ function exportarPlanejamento() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Planejamento até o fim do curso — ${escapeHtml(metadata.nome || 'Aluno')}</title>
+  <title>Planejamento Pedagógico — ${escapeHtml(metadata.nome || 'Aluno')}</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     body {
@@ -820,7 +832,7 @@ function exportarPlanejamento() {
 </head>
 <body>
   <header class="grade-export-title">
-    <h2>Planejamento até o fim do curso</h2>
+    <h2>Planejamento Pedagógico</h2>
   </header>
   <div class="grade-export-summary">
     <div class="grade-export-summary-main">
