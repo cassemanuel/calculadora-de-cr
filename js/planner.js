@@ -32,6 +32,8 @@ import {
 const LIMITE_CREDITOS = Object.freeze({ MIN: 8, MAX: 28 });
 
 const CREDITOS_ELETIVA = 4;
+const NOTA_MAXIMA = 10;
+const NOTA_MINIMA = 0;
 
 // Metas curriculares de eletivas do PPC 2022, usadas para gerar placeholders
 // genéricos no banco de pendências (o BOA lista optativas pelo código, o que
@@ -406,7 +408,17 @@ function renderSemestreCard(semestre, index, resumo, crProjetado) {
         'aria-label': `Nota estimada para ${d.codigo || 'disciplina'}`,
         oninput: (e) => {
           const valor = e.target.value.trim();
-          d.grau = valor === '' ? null : parseNumberBR(valor);
+          if (valor === '') {
+            d.grau = null;
+          } else {
+            let nota = parseNumberBR(valor);
+            // Trava física: notas fora de [0, 10] são reajustadas no campo.
+            if (!isNaN(nota) && (nota > NOTA_MAXIMA || nota < NOTA_MINIMA)) {
+              nota = Math.min(NOTA_MAXIMA, Math.max(NOTA_MINIMA, nota));
+              e.target.value = String(nota);
+            }
+            d.grau = isNaN(nota) ? null : nota;
+          }
           persistir();
           atualizarRodapeSemestre(index);
         },
