@@ -47,6 +47,42 @@ const METAS_ELETIVAS = Object.freeze([
 
 const PERIODO_REGEX = /^(\d{4})\s*\/\s*(\d)$/;
 
+// Mapa de pré-requisitos oficiais por código de disciplina (PPC 2022 e grade
+// histórica). Extraído das tabelas curriculares em docs-pessoais/ — códigos
+// separados por vírgula, sem formatação adicional.
+const MAPA_REQUISITOS = Object.freeze({
+  // 2º Período
+  'ICP141': 'ICP131',
+  'ICP142': 'ICP131',
+  'ICP143': 'ICP131, ICP132, ICP133',
+  'ICP144': 'ICP136',
+  // 3º Período
+  'ICP116': 'ICP141',
+  'ICP212': 'ICP131, MAE111',
+  'ICP213': 'ICP141',
+  'MAE992': 'MAE111',
+  // 4º Período
+  'ICP251': 'ICP133',
+  'ICP248': 'ICP115, ICP238, MAE992',
+  'ICP252': 'ICP115, ICP238, MAE992',
+  'ICP489': 'ICP116',
+  'MAD243': 'MAE992',
+  // Disciplinas do tronco e eletivas (conforme grade curricular vigente)
+  'ICP123': 'ICP141, ICP144',
+  'ICP351': 'ICP115, MAE992',
+  'ICP361': 'ICP116',
+  'ICP362': 'ICP131, ICP133, MAD243',
+  'ICP363': 'ICP248, MAD243',
+  'ICP365': 'ICP115, ICP238',
+  'ICP368': 'ICP116, ICP144',
+  'ICP370': 'ICP123',
+  'ICP472': 'ICP249',
+  'ICP473': 'ICP353, ICP362',
+  'ICP622': 'ICP361',
+  'ICPK01': 'ICP472',
+  'FIT122': 'FIT112, MAC118/MAE111',
+});
+
 let containerEl = null;
 let getHistoryData = () => null;
 let planner = { banco: [], semestres: [] };
@@ -175,7 +211,7 @@ function renderBanco() {
     const crR = parseNumberBR(campoCrR.value);
     if (!codigo && !nome) return;
     if (codigoExiste(codigo)) return;
-    planner.banco.push({ codigo: codigo || 'ELETIVA', nome: nome || codigo, crR, periodoRecomendado: null, status: 'manual' });
+    planner.banco.push({ codigo: codigo || 'ELETIVA', nome: nome || codigo, crR, requisitos: MAPA_REQUISITOS[codigo] || '', periodoRecomendado: null, status: 'manual' });
     campoCodigo.value = '';
     campoNome.value = '';
     campoCrR.value = '';
@@ -295,6 +331,7 @@ async function importarBOA(input) {
         codigo: d.codigo,
         nome: d.nome,
         crR: d.crR,
+        requisitos: MAPA_REQUISITOS[String(d.codigo || '').toUpperCase()] || '',
         periodoRecomendado: d.periodoRecomendado ?? null,
         status: d.status || 'pendente',
       });
